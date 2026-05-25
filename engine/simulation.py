@@ -14,6 +14,7 @@ class EvacuationModel:
         num_agents: int = 25,
         grid_size: int = GRID_SIZE,
         seed: Optional[int] = None,
+        stress_level: float = 1.0,
     ) -> None:
         if seed is not None:
             random.seed(seed)
@@ -23,6 +24,7 @@ class EvacuationModel:
 
         self.num_agents = num_agents
         self.grid_size = grid_size
+        self.stress_level = max(0.1, float(stress_level))
         self.running = True
         self.schedule: Optional[EvacuationScheduler] = None
         self.environment: Optional[Environment] = None
@@ -30,6 +32,7 @@ class EvacuationModel:
         self.evacuated_count = 0
         self.current_step = 0
         self.metrics_collector: Optional[MetricsCollector] = None
+        self.scenario_name = "scenario_1"
 
     def setup(self) -> None:
         from evacsim.engine.scheduler import EvacuationScheduler

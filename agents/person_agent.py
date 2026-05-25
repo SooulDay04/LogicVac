@@ -44,7 +44,8 @@ class PersonAgent(Agent):
         elif self.attributes.state == AgentState.BLOCKED:
             self.steps_blocked += 1
             if self.steps_blocked > 5:
-                self.attributes.increase_stress(2.0)
+                model_stress = getattr(self.model, "stress_level", 1.0)
+                self.attributes.increase_stress(2.0 * model_stress)
                 if self.attributes.stress >= PANIC_THRESHOLD:
                     self.attributes.set_state(AgentState.PANIC)
 

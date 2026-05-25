@@ -1,0 +1,112 @@
+[
+  {
+    "step": 1,
+    "total_agents": 25,
+    "evacuated": 0,
+    "moving": 25,
+    "blocked": 0,
+    "panic": 0,
+    "avg_stress": 0.0,
+    "evacuation_rate": 0.0
+  },
+  {
+    "step": 2,
+    "total_agents": 25,
+    "evacuated": 0,
+    "moving": 25,
+    "blocked": 0,
+    "panic": 0,
+    "avg_stress": 0.0,
+    "evacuation_rate": 0.0
+  },
+  {
+    "step": 3,
+    "total_agents": 25,
+    "evacuated": 0,
+    "moving": 25,
+    "blocked": 0,
+    "panic": 0,
+    "avg_stress": 0.0,
+    "evacuation_rate": 0.0
+  },
+  {
+    "step": 4,
+    "total_agents": 25,
+    "evacuated": 0,
+    "moving": 25,
+    "blocked": 0,
+    "panic": 0,
+    "avg_stress": 0.0,
+    "evacuation_rate": 0.0
+  },
+  {
+    "step": 5,
+    "total_agents": 25,
+    "evacuated": 0,
+    "moving": 25,
+    "blocked": 0,
+    "panic": 0,
+    "avg_stress": 0.0,
+    "evacuation_rate": 0.0
+  },
+  {
+    "step": 6,
+    "total_agents": 25,
+    "evacuated": 0,
+    "moving": 24,
+    "blocked": 1,
+    "panic": 0,
+    "avg_stress": 0.0,
+    "evacuation_rate": 0.0
+  },
+  {
+    "step": 7,
+    "total_agents": 25,
+    "evacuated": 0,
+    "moving": 24,
+    "blocked": 1,
+    "panic": 0,
+    "avg_stress": 0.0,
+    "evacuation_rate": 0.0
+  },
+  {
+    "step": 8,
+    "total_agents": 25,
+    "evacuated": 0,
+    "moving": 24,
+    "blocked": 1,
+    "panic": 0,
+    "avg_stress": 0.0,
+    "evacuation_rate": 0.0
+  },
+  {
+    "step": 9,
+    "total_agents": 25,
+    "evacuated": 0,
+    "moving": 23,
+    "blocked": 2,
+    "panic": 0,
+    "avg_stress": 0.0,
+    "evacuation_rate": 0.0
+  },
+  {
+    "step": 10,
+    "total_agents": 25,
+    "evacuated": 0,
+    "moving": 24,
+    "blocked": 1,
+    "panic": 0,
+    "avg_stress": 0.0,
+    "evacuation_rate": 0.0
+  },
+  {
+    "step": 11,
+    "total_agents": 25,
+    "evacuated": 0,
+    "moving": 24,
+    "blocked": 1,
+    "panic": 0,
+    "avg_stress": 0.0,
+    "evacuation_rate": 0.0
+  }
+]

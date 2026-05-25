@@ -25,12 +25,13 @@ class StressModel:
 
     def update_stress(self) -> None:
         density = self.calculate_local_density()
+        model_stress = getattr(self.agent.model, "stress_level", 1.0)
         if density >= CONGESTION_THRESHOLD:
             self.agent.attributes.increase_stress(
-                STRESS_INCREMENT_RATE * density
+                STRESS_INCREMENT_RATE * density * model_stress
             )
         else:
-            self.agent.attributes.decrease_stress(STRESS_INCREMENT_RATE * 0.1)
+            self.agent.attributes.decrease_stress(STRESS_INCREMENT_RATE * 0.1 / max(model_stress, 0.1))
 
     def get_stress_level(self) -> str:
         stress = self.agent.attributes.stress

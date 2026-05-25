@@ -10,46 +10,29 @@ if str(PROJECT_DIR) not in sys.path:
 
 from dash import Dash, Input, Output, State, callback_context, dcc, html
 
-from evacsim.config import GRID_SIZE
 from evacsim.engine.simulation import EvacuationModel
+from evacsim.ui.simulation_controller import SimulationController
 from evacsim.visualization.renderer import PlotlyGridRenderer
 
 
 DEFAULT_AGENT_COUNT = 25
 MAX_SIMULATION_SPEED = 10
+ROUTE_ALGORITHMS = ["astar", "bfs", "dijkstra"]
 
 model = None
-renderer = PlotlyGridRenderer(GRID_SIZE)
-
-
-def create_model(agent_count: int) -> EvacuationModel:
-    simulation = EvacuationModel(num_agents=agent_count, grid_size=GRID_SIZE, seed=42)
-    simulation.setup()
-    apply_basic_visual_layout(simulation)
-    return simulation
-
-
-def apply_basic_visual_layout(simulation: EvacuationModel) -> None:
-    grid = simulation.environment.grid
-    building = simulation.environment.building
-
-    if not building.walls and grid.size >= 12:
-        wall_x = grid.size // 2
-        gap_y = grid.size // 2
-        for y in range(2, grid.size - 2):
-            if y != gap_y:
-                building.add_wall(wall_x, y)
-
-    if not building.obstacles and grid.size >= 18:
-        x1 = int(grid.size * 0.68)
-        y1 = int(grid.size * 0.28)
-        building.add_rectangular_obstacle(x1, y1, x1 + 2, y1 + 4)
+controller = SimulationController()
+renderer = PlotlyGridRenderer(30)
 
 
 def get_model() -> EvacuationModel:
     global model
     if model is None:
-        model = create_model(DEFAULT_AGENT_COUNT)
+        model = controller.create_model(
+            scenario_name=controller.default_scenario,
+            agent_count=DEFAULT_AGENT_COUNT,
+            route_algorithm=controller.default_algorithm,
+            stress_level=controller.default_stress_level,
+        )
     return model
 
 
@@ -117,6 +100,49 @@ app.layout = html.Div(
                     ],
                     className="control-group",
                 ),
+                html.Div(
+                    [
+                        html.Label("Nivel de estres"),
+                        dcc.Slider(
+                            id="stress-slider",
+                            min=0.5,
+                            max=2.0,
+                            step=0.1,
+                            value=1.0,
+                            marks={0.5: "0.5x", 1.0: "1x", 1.5: "1.5x", 2.0: "2x"},
+                            tooltip={"placement": "bottom", "always_visible": False},
+                        ),
+                    ],
+                    className="control-group",
+                ),
+                html.Div(
+                    [
+                        html.Label("Escenario"),
+                        dcc.Dropdown(
+                            id="scenario-selector",
+                            options=[
+                                {"label": name.replace("_", " ").title(), "value": name}
+                                for name in controller.list_scenarios()
+                            ],
+                            value=controller.default_scenario,
+                            clearable=False,
+                        ),
+                    ],
+                    className="control-group",
+                ),
+                html.Div(
+                    [
+                        html.Label("Algoritmo de ruta"),
+                        dcc.Dropdown(
+                            id="route-selector",
+                            options=[{"label": algo.upper(), "value": algo} for algo in ROUTE_ALGORITHMS],
+                            value=controller.default_algorithm,
+                            clearable=False,
+                        ),
+                    ],
+                    className="control-group",
+                ),
+                html.Button("Exportar datos", id="export-button", n_clicks=0, className="secondary-button"),
                 html.Div(
                     [
                         legend_item("#1f2933", "Pared"),
@@ -322,25 +348,61 @@ def update_speed(speed: int) -> int:
     Input("simulation-clock", "n_intervals"),
     Input("reset-button", "n_clicks"),
     Input("reset-view-button", "n_clicks"),
+    Input("scenario-selector", "value"),
+    Input("route-selector", "value"),
+    Input("stress-slider", "value"),
+    Input("export-button", "n_clicks"),
     State("agent-slider", "value"),
 )
 def update_simulation(
     n_intervals: int,
     reset_clicks: int,
     reset_view_clicks: int,
+    scenario_name: str,
+    route_algorithm: str,
+    stress_level: float,
+    export_clicks: int,
     agent_count: int,
 ):
     global model
     triggered = [item["prop_id"] for item in callback_context.triggered]
 
-    if any(prop.startswith("reset-button.") for prop in triggered):
-        model = create_model(agent_count)
+    if (
+        model is None
+        or any(
+            prop.startswith(prefix)
+            for prefix in (
+                "reset-button.",
+                "scenario-selector.",
+                "stress-slider.",
+                "agent-slider.",
+            )
+            for prop in triggered
+        )
+    ):
+        model = controller.create_model(
+            scenario_name=scenario_name,
+            agent_count=agent_count,
+            route_algorithm=route_algorithm,
+            stress_level=stress_level,
+        )
+        model.scenario_name = scenario_name
+    elif any(prop.startswith("route-selector.") for prop in triggered):
+        simulation = get_model()
+        simulation.route_manager.set_algorithm(route_algorithm)
+    elif any(prop.startswith("export-button.") for prop in triggered):
+        simulation = get_model()
+        paths, rows = controller.export_metrics(simulation)
+        exported = ", ".join(Path(p).name for p in paths) if paths else "sin archivos"
+        status = f"Paso {simulation.current_step} | Evacuados {simulation.evacuated_count}/{simulation.num_agents} | Exportado: {rows} filas ({exported})"
+        return renderer.render(simulation, reset_view_clicks), status
     elif n_intervals > 0 and any(prop.startswith("simulation-clock.") for prop in triggered):
         simulation = get_model()
         if simulation.running:
             simulation.step()
 
     simulation = get_model()
+    simulation.scenario_name = scenario_name
     status = f"Paso {simulation.current_step} | Evacuados {simulation.evacuated_count}/{simulation.num_agents}"
     return renderer.render(simulation, reset_view_clicks), status
 
