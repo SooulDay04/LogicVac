@@ -7,7 +7,7 @@ from mesa import Agent
 from evacsim.agents.attributes import AgentAttributes
 from evacsim.agents.states import AgentState
 from evacsim.behavior.decision_engine import DecisionEngine
-from evacsim.config import PANIC_THRESHOLD
+from evacsim.config import CellType, PANIC_THRESHOLD
 
 if TYPE_CHECKING:
     from evacsim.engine.simulation import EvacuationModel
@@ -60,9 +60,11 @@ class PersonAgent(Agent):
             self.path_index += 1
             self.steps_blocked = 0
 
-            if self.model.environment.grid.get_cell(*next_pos) == 3:
+            if self.model.environment.grid.get_cell(*next_pos) == CellType.EXIT:
                 self.attributes.set_state(AgentState.EVACUATED)
                 self.model.evacuated_count += 1
+                self.model.grid.remove_agent(self)
+                self.pos = None
         else:
             self.steps_blocked += 1
             if self.steps_blocked > 3:

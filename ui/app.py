@@ -83,6 +83,7 @@ app.layout = html.Div(
                     [
                         html.Button("Iniciar", id="start-button", n_clicks=0, className="primary-button"),
                         html.Button("Reiniciar", id="reset-button", n_clicks=0, className="secondary-button"),
+                        html.Button("Vista", id="reset-view-button", n_clicks=0, className="secondary-button"),
                     ],
                     className="button-row",
                 ),
@@ -133,7 +134,17 @@ app.layout = html.Div(
                 dcc.Graph(
                     id="grid-view",
                     figure=renderer.render(get_model()),
-                    config={"displayModeBar": False, "responsive": True},
+                    config={
+                        "displayModeBar": True,
+                        "displaylogo": False,
+                        "responsive": False,
+                        "modeBarButtonsToRemove": [
+                            "lasso2d",
+                            "select2d",
+                            "autoScale2d",
+                            "toggleSpikelines",
+                        ],
+                    },
                     className="grid-graph",
                 )
             ],
@@ -185,7 +196,7 @@ app.index_string = """
             }
             .button-row {
                 display: grid;
-                grid-template-columns: 1fr 1fr;
+                grid-template-columns: repeat(3, 1fr);
                 gap: 10px;
             }
             button {
@@ -237,6 +248,8 @@ app.index_string = """
             }
             .grid-graph {
                 width: 100%;
+                height: 720px;
+                max-height: calc(100vh - 48px);
                 min-height: calc(100vh - 48px);
                 background: #f8fafc;
                 border: 1px solid #d5dce5;
@@ -255,6 +268,7 @@ app.index_string = """
                     padding: 16px;
                 }
                 .grid-graph {
+                    height: 520px;
                     min-height: 520px;
                 }
             }
@@ -307,11 +321,13 @@ def update_speed(speed: int) -> int:
     Output("status-line", "children"),
     Input("simulation-clock", "n_intervals"),
     Input("reset-button", "n_clicks"),
+    Input("reset-view-button", "n_clicks"),
     State("agent-slider", "value"),
 )
 def update_simulation(
     n_intervals: int,
     reset_clicks: int,
+    reset_view_clicks: int,
     agent_count: int,
 ):
     global model
@@ -326,7 +342,7 @@ def update_simulation(
 
     simulation = get_model()
     status = f"Paso {simulation.current_step} | Evacuados {simulation.evacuated_count}/{simulation.num_agents}"
-    return renderer.render(simulation), status
+    return renderer.render(simulation, reset_view_clicks), status
 
 
 if __name__ == "__main__":

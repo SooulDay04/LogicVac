@@ -23,7 +23,7 @@ class PlotlyGridRenderer:
     def __init__(self, grid_size: int) -> None:
         self.grid_size = grid_size
 
-    def render(self, model: EvacuationModel) -> go.Figure:
+    def render(self, model: EvacuationModel, view_revision: int = 0) -> go.Figure:
         env_grid = model.environment.grid
         z = [
             [int(env_grid.get_cell(x, y)) for x in range(self.grid_size)]
@@ -84,7 +84,9 @@ class PlotlyGridRenderer:
                 "constrain": "domain",
             },
             showlegend=False,
+            width=720,
             height=720,
-            uirevision="evacsim-grid",
+            transition={"duration": 120, "easing": "linear"},
+            uirevision=f"evacsim-grid-{view_revision}",
         )
         return fig
