@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 import plotly.graph_objects as go
 
+from evacsim.agents.personality import PERSONALITY_PROFILES, PersonalityType
 from evacsim.config import CellType
 
 if TYPE_CHECKING:
@@ -23,7 +24,12 @@ class PlotlyGridRenderer:
     def __init__(self, grid_size: int) -> None:
         self.grid_size = grid_size
 
-    def render(self, model: EvacuationModel, view_revision: int = 0) -> go.Figure:
+    def render(
+        self,
+        model: EvacuationModel,
+        view_revision: int = 0,
+        visible_personalities: list[str] | None = None,
+    ) -> go.Figure:
         env_grid = model.environment.grid
         z = [
             [int(env_grid.get_cell(x, y)) for x in range(self.grid_size)]
@@ -42,25 +48,39 @@ class PlotlyGridRenderer:
             )
         )
 
+        visible_set = set(visible_personalities or [p.value for p in PersonalityType])
         agents = [
             agent
             for agent in model.schedule.agents
             if not agent.attributes.is_evacuated() and agent.pos is not None
+            and agent.attributes.personality.value in visible_set
         ]
-        if agents:
+        for personality in PersonalityType:
+            group_agents = [
+                agent
+                for agent in agents
+                if agent.attributes.personality == personality
+            ]
+            if not group_agents:
+                continue
+
+            profile = PERSONALITY_PROFILES[personality]
             fig.add_trace(
                 go.Scatter(
-                    x=[agent.pos[0] for agent in agents],
-                    y=[agent.pos[1] for agent in agents],
+                    x=[agent.pos[0] for agent in group_agents],
+                    y=[agent.pos[1] for agent in group_agents],
                     mode="markers",
                     marker={
                         "size": 11,
-                        "color": "#2563eb",
+                        "color": profile.color,
                         "line": {"width": 1.5, "color": "#ffffff"},
                     },
-                    hovertemplate="Agente %{text}<extra></extra>",
-                    text=[str(agent.unique_id) for agent in agents],
-                    name="Agentes",
+                    hovertemplate="%{text}<extra></extra>",
+                    text=[
+                        f"Agente {agent.unique_id} | {profile.label}"
+                        for agent in group_agents
+                    ],
+                    name=profile.label,
                 )
             )
 
@@ -83,7 +103,7 @@ class PlotlyGridRenderer:
                 "showticklabels": False,
                 "constrain": "domain",
             },
-            showlegend=False,
+            showlegend=True,
             width=720,
             height=720,
             transition={"duration": 120, "easing": "linear"},

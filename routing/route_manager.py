@@ -22,7 +22,7 @@ class RouteManager:
         occupancy: Optional[list[list[int]]] = None,
     ) -> list[tuple[int, int]]:
         cache_key = (start, goal)
-        if cache_key in self.cache:
+        if occupancy is None and cache_key in self.cache:
             return self.cache[cache_key]
 
         if self.algorithm == "astar":
@@ -34,7 +34,7 @@ class RouteManager:
         else:
             path = astar_search(self.grid, start, goal, occupancy)
 
-        if path:
+        if path and occupancy is None:
             self.cache[cache_key] = path
         return path
 

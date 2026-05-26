@@ -1,6 +1,7 @@
 import unittest
 
 from evacsim.agents.attributes import AgentAttributes
+from evacsim.agents.personality import PERSONALITY_PROFILES, PersonalityType
 from evacsim.agents.states import AgentState
 
 
@@ -9,8 +10,33 @@ class TestAgents(unittest.TestCase):
         attrs = AgentAttributes(1, speed=1.5)
         self.assertEqual(attrs.agent_id, 1)
         self.assertEqual(attrs.speed, 1.5)
+        self.assertEqual(attrs.personality, PersonalityType.NORMAL)
         self.assertEqual(attrs.stress, 0.0)
         self.assertEqual(attrs.state, AgentState.IDLE)
+
+    def test_personality_changes_speed(self) -> None:
+        attrs = AgentAttributes(1, speed=1.0, personality=PersonalityType.ANSIOSO)
+        profile = PERSONALITY_PROFILES[PersonalityType.ANSIOSO]
+        self.assertEqual(attrs.speed, profile.speed_multiplier)
+
+    def test_all_personalities_have_behavior_modifiers(self) -> None:
+        self.assertEqual(len(PERSONALITY_PROFILES), 5)
+        for personality in PersonalityType:
+            profile = PERSONALITY_PROFILES[personality]
+            self.assertGreater(profile.speed_multiplier, 0)
+            self.assertGreaterEqual(profile.follow_tendency, 0)
+            self.assertLessEqual(profile.follow_tendency, 1)
+            self.assertGreaterEqual(profile.route_change_probability, 0)
+            self.assertLessEqual(profile.route_change_probability, 1)
+            self.assertGreaterEqual(profile.min_distance, 0)
+            self.assertGreaterEqual(profile.push_tendency, 0)
+            self.assertLessEqual(profile.push_tendency, 1)
+
+    def test_ansioso_can_push_and_lider_can_yield(self) -> None:
+        anxious = PERSONALITY_PROFILES[PersonalityType.ANSIOSO]
+        leader = PERSONALITY_PROFILES[PersonalityType.LIDER]
+        self.assertGreater(anxious.push_tendency, 0)
+        self.assertTrue(leader.yield_near_exit)
 
     def test_stress_increase(self) -> None:
         attrs = AgentAttributes(1)

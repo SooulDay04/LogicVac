@@ -10,6 +10,7 @@ if str(PROJECT_DIR) not in sys.path:
 
 from dash import Dash, Input, Output, State, callback_context, dcc, html
 
+from evacsim.agents.personality import PERSONALITY_PROFILES, PersonalityType
 from evacsim.engine.simulation import EvacuationModel
 from evacsim.ui.simulation_controller import SimulationController
 from evacsim.visualization.renderer import PlotlyGridRenderer
@@ -18,6 +19,13 @@ from evacsim.visualization.renderer import PlotlyGridRenderer
 DEFAULT_AGENT_COUNT = 25
 MAX_SIMULATION_SPEED = 10
 ROUTE_ALGORITHMS = ["astar", "bfs", "dijkstra"]
+PERSONALITY_OPTIONS = [
+    {
+        "label": PERSONALITY_PROFILES[personality].label,
+        "value": personality.value,
+    }
+    for personality in PersonalityType
+]
 
 model = None
 controller = SimulationController()
@@ -142,13 +150,30 @@ app.layout = html.Div(
                     ],
                     className="control-group",
                 ),
+                html.Div(
+                    [
+                        html.Label("Personalidades visibles"),
+                        dcc.Checklist(
+                            id="personality-filter",
+                            options=PERSONALITY_OPTIONS,
+                            value=[personality.value for personality in PersonalityType],
+                            className="personality-filter",
+                            inputClassName="personality-filter-input",
+                            labelClassName="personality-filter-label",
+                        ),
+                    ],
+                    className="control-group",
+                ),
                 html.Button("Exportar datos", id="export-button", n_clicks=0, className="secondary-button"),
                 html.Div(
                     [
                         legend_item("#1f2933", "Pared"),
                         legend_item("#16a34a", "Salida"),
                         legend_item("#7f8c8d", "Obstaculo"),
-                        legend_item("#2563eb", "Agente"),
+                        *[
+                            legend_item(PERSONALITY_PROFILES[p].color, PERSONALITY_PROFILES[p].label)
+                            for p in PersonalityType
+                        ],
                     ],
                     className="legend",
                 ),
@@ -254,6 +279,24 @@ app.index_string = """
                 gap: 10px;
                 padding-top: 8px;
             }
+            .personality-filter {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 10px 12px;
+                font-size: 14px;
+                color: #334155;
+            }
+            .personality-filter-label {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-weight: 650;
+                text-transform: none;
+                margin: 0;
+            }
+            .personality-filter-input {
+                accent-color: #0f766e;
+            }
             .legend-item {
                 display: flex;
                 align-items: center;
@@ -352,6 +395,7 @@ def update_speed(speed: int) -> int:
     Input("route-selector", "value"),
     Input("stress-slider", "value"),
     Input("export-button", "n_clicks"),
+    Input("personality-filter", "value"),
     State("agent-slider", "value"),
 )
 def update_simulation(
@@ -362,6 +406,7 @@ def update_simulation(
     route_algorithm: str,
     stress_level: float,
     export_clicks: int,
+    visible_personalities: list[str],
     agent_count: int,
 ):
     global model
@@ -395,7 +440,7 @@ def update_simulation(
         paths, rows = controller.export_metrics(simulation)
         exported = ", ".join(Path(p).name for p in paths) if paths else "sin archivos"
         status = f"Paso {simulation.current_step} | Evacuados {simulation.evacuated_count}/{simulation.num_agents} | Exportado: {rows} filas ({exported})"
-        return renderer.render(simulation, reset_view_clicks), status
+        return renderer.render(simulation, reset_view_clicks, visible_personalities), status
     elif n_intervals > 0 and any(prop.startswith("simulation-clock.") for prop in triggered):
         simulation = get_model()
         if simulation.running:
@@ -404,7 +449,7 @@ def update_simulation(
     simulation = get_model()
     simulation.scenario_name = scenario_name
     status = f"Paso {simulation.current_step} | Evacuados {simulation.evacuated_count}/{simulation.num_agents}"
-    return renderer.render(simulation, reset_view_clicks), status
+    return renderer.render(simulation, reset_view_clicks, visible_personalities), status
 
 
 if __name__ == "__main__":
