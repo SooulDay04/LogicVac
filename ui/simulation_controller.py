@@ -8,6 +8,7 @@ from evacsim.config import GRID_SIZE
 from evacsim.data.exporter import DataExporter
 from evacsim.engine.scenario_loader import ScenarioLoader
 from evacsim.engine.simulation import EvacuationModel
+from evacsim.heatmaps.exports import HeatmapExporter
 
 
 class SimulationController:
@@ -15,6 +16,9 @@ class SimulationController:
         self.loader = ScenarioLoader()
         self.exporter = DataExporter(
             output_dir=str(Path(__file__).resolve().parents[1] / "data" / "output")
+        )
+        self.heatmap_exporter = HeatmapExporter(
+            Path(__file__).resolve().parents[1] / "data" / "output"
         )
         self.default_scenario = "scenario_1"
         self.default_algorithm = "astar"
@@ -52,6 +56,16 @@ class SimulationController:
         base_name = f"{model.scenario_name}_metrics_{stamp}"
         paths = self.exporter.export_all(data, base_name, formats=["csv", "json"])
         return paths, len(data)
+
+    def export_heatmap_csv(self, model: EvacuationModel) -> list[str]:
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        base_name = f"{model.scenario_name}_heatmap_{stamp}"
+        return self.heatmap_exporter.export_csv(model.heatmap_tracker, base_name)
+
+    def export_heatmap_image(self, model: EvacuationModel) -> str:
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{model.scenario_name}_heatmap_{stamp}.png"
+        return self.heatmap_exporter.export_image(model.heatmap_tracker, filename)
 
     def _apply_scenario_layout(self, model: EvacuationModel, scenario: dict[str, Any]) -> None:
         building = model.environment.building

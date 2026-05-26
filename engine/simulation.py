@@ -32,11 +32,13 @@ class EvacuationModel:
         self.evacuated_count = 0
         self.current_step = 0
         self.metrics_collector: Optional[MetricsCollector] = None
+        self.heatmap_tracker = None
         self.scenario_name = "scenario_1"
         self.leader_exit_lock = False
 
     def setup(self) -> None:
         from evacsim.engine.scheduler import EvacuationScheduler
+        from evacsim.heatmaps.tracker import HeatmapTracker
         from evacsim.metrics.collector import MetricsCollector
         from evacsim.routing.route_manager import RouteManager
 
@@ -49,6 +51,7 @@ class EvacuationModel:
         self.route_manager = RouteManager(grid)
         self.schedule = EvacuationScheduler(self)
         self.metrics_collector = MetricsCollector()
+        self.heatmap_tracker = HeatmapTracker(self.grid_size)
         self.leader_exit_lock = False
 
         start_cells = [
@@ -77,6 +80,8 @@ class EvacuationModel:
             self.grid.place_agent(agent, (x, y))
             agent._record_position((x, y))
 
+        self.heatmap_tracker.record_step(self.schedule.agents)
+
     def step(self) -> None:
         # One leader can complete exit per simulation tick.
         self.leader_exit_lock = False
@@ -87,6 +92,8 @@ class EvacuationModel:
 
         if self.metrics_collector is not None:
             self.metrics_collector.collect_step(self)
+        if self.heatmap_tracker is not None and self.schedule is not None:
+            self.heatmap_tracker.record_step(self.schedule.agents)
 
         if self.evacuated_count >= self.num_agents:
             self.running = False

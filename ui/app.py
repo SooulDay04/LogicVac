@@ -196,6 +196,32 @@ app.layout = html.Div(
                     ],
                     className="control-group trajectory-panel",
                 ),
+                html.Div(
+                    [
+                        html.Label("Mapa de calor"),
+                        dcc.Checklist(
+                            id="heatmap-toggle",
+                            options=[{"label": "Mostrar mapa de calor", "value": "show"}],
+                            value=["show"],
+                            className="trajectory-toggle",
+                            inputClassName="personality-filter-input",
+                            labelClassName="personality-filter-label",
+                        ),
+                        html.Button(
+                            "Exportar imagen",
+                            id="export-heatmap-image-button",
+                            n_clicks=0,
+                            className="secondary-button",
+                        ),
+                        html.Button(
+                            "Exportar CSV",
+                            id="export-heatmap-csv-button",
+                            n_clicks=0,
+                            className="secondary-button",
+                        ),
+                    ],
+                    className="control-group heatmap-panel",
+                ),
                 html.Button("Exportar datos", id="export-button", n_clicks=0, className="secondary-button"),
                 html.Div(
                     [
@@ -216,7 +242,7 @@ app.layout = html.Div(
             [
                 dcc.Graph(
                     id="grid-view",
-                    figure=renderer.render(get_model()),
+                    figure=renderer.render(get_model(), show_heatmap=True),
                     config={
                         "displayModeBar": True,
                         "displaylogo": False,
@@ -330,6 +356,10 @@ app.index_string = """
                 accent-color: #0f766e;
             }
             .trajectory-panel {
+                display: grid;
+                gap: 12px;
+            }
+            .heatmap-panel {
                 display: grid;
                 gap: 12px;
             }
@@ -447,10 +477,13 @@ def update_speed(speed: int) -> int:
     Input("route-selector", "value"),
     Input("stress-slider", "value"),
     Input("export-button", "n_clicks"),
+    Input("export-heatmap-image-button", "n_clicks"),
+    Input("export-heatmap-csv-button", "n_clicks"),
     Input("personality-filter", "value"),
     Input("trajectory-toggle", "value"),
     Input("trajectory-mode", "value"),
     Input("trajectory-agent", "value"),
+    Input("heatmap-toggle", "value"),
     State("agent-slider", "value"),
     State("is-running", "data"),
 )
@@ -462,10 +495,13 @@ def update_simulation(
     route_algorithm: str,
     stress_level: float,
     export_clicks: int,
+    export_heatmap_image_clicks: int,
+    export_heatmap_csv_clicks: int,
     visible_personalities: list[str],
     trajectory_toggle: list[str],
     trajectory_mode: str,
     selected_agent_id: int | None,
+    heatmap_toggle: list[str],
     agent_count: int,
     is_running: bool,
 ):
@@ -502,6 +538,7 @@ def update_simulation(
         status = f"Paso {simulation.current_step} | Evacuados {simulation.evacuated_count}/{simulation.num_agents} | Exportado: {rows} filas ({exported})"
         agent_options, selected_agent_id = _trajectory_agent_options(simulation, selected_agent_id)
         show_trajectories = "show" in (trajectory_toggle or [])
+        show_heatmap = "show" in (heatmap_toggle or [])
         return (
             renderer.render(
                 simulation,
@@ -510,6 +547,50 @@ def update_simulation(
                 show_trajectories,
                 trajectory_mode,
                 selected_agent_id,
+                show_heatmap,
+            ),
+            status,
+            agent_options,
+            _path_summary(simulation, selected_agent_id, show_trajectories),
+        )
+    elif any(prop.startswith("export-heatmap-image-button.") for prop in triggered):
+        simulation = get_model()
+        path = controller.export_heatmap_image(simulation)
+        status = _status_with_export(simulation, f"Imagen heatmap: {Path(path).name}")
+        agent_options, selected_agent_id = _trajectory_agent_options(simulation, selected_agent_id)
+        show_trajectories = "show" in (trajectory_toggle or [])
+        show_heatmap = "show" in (heatmap_toggle or [])
+        return (
+            renderer.render(
+                simulation,
+                reset_view_clicks,
+                visible_personalities,
+                show_trajectories,
+                trajectory_mode,
+                selected_agent_id,
+                show_heatmap,
+            ),
+            status,
+            agent_options,
+            _path_summary(simulation, selected_agent_id, show_trajectories),
+        )
+    elif any(prop.startswith("export-heatmap-csv-button.") for prop in triggered):
+        simulation = get_model()
+        paths = controller.export_heatmap_csv(simulation)
+        exported = ", ".join(Path(p).name for p in paths)
+        status = _status_with_export(simulation, f"CSV heatmap: {exported}")
+        agent_options, selected_agent_id = _trajectory_agent_options(simulation, selected_agent_id)
+        show_trajectories = "show" in (trajectory_toggle or [])
+        show_heatmap = "show" in (heatmap_toggle or [])
+        return (
+            renderer.render(
+                simulation,
+                reset_view_clicks,
+                visible_personalities,
+                show_trajectories,
+                trajectory_mode,
+                selected_agent_id,
+                show_heatmap,
             ),
             status,
             agent_options,
@@ -525,6 +606,7 @@ def update_simulation(
     status = f"Paso {simulation.current_step} | Evacuados {simulation.evacuated_count}/{simulation.num_agents}"
     agent_options, selected_agent_id = _trajectory_agent_options(simulation, selected_agent_id)
     show_trajectories = "show" in (trajectory_toggle or [])
+    show_heatmap = "show" in (heatmap_toggle or [])
     return (
         renderer.render(
             simulation,
@@ -533,10 +615,19 @@ def update_simulation(
             show_trajectories,
             trajectory_mode,
             selected_agent_id,
+            show_heatmap,
         ),
         status,
         agent_options,
         _path_summary(simulation, selected_agent_id, show_trajectories),
+    )
+
+
+def _status_with_export(simulation: EvacuationModel, exported: str) -> str:
+    return (
+        f"Paso {simulation.current_step} | "
+        f"Evacuados {simulation.evacuated_count}/{simulation.num_agents} | "
+        f"Exportado: {exported}"
     )
 
 

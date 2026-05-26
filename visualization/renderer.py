@@ -32,6 +32,7 @@ class PlotlyGridRenderer:
         show_trajectories: bool = False,
         trajectory_mode: str = "all",
         selected_agent_id: int | None = None,
+        show_heatmap: bool = False,
     ) -> go.Figure:
         env_grid = model.environment.grid
         grid_size = model.grid_size
@@ -51,6 +52,8 @@ class PlotlyGridRenderer:
                 hoverinfo="skip",
             )
         )
+        if show_heatmap:
+            self._add_heatmap_trace(fig, model)
 
         visible_set = set(visible_personalities or [p.value for p in PersonalityType])
         visible_agents = [
@@ -126,6 +129,27 @@ class PlotlyGridRenderer:
             uirevision=f"evacsim-grid-{view_revision}",
         )
         return fig
+
+    def _add_heatmap_trace(self, fig: go.Figure, model: EvacuationModel) -> None:
+        tracker = getattr(model, "heatmap_tracker", None)
+        if tracker is None or tracker.max_density() <= 0:
+            return
+
+        fig.add_trace(
+            go.Heatmap(
+                z=tracker.cumulative_density,
+                colorscale="YlOrRd",
+                zmin=0,
+                zmax=tracker.max_density(),
+                opacity=0.62,
+                colorbar={"title": "Densidad"},
+                hovertemplate=(
+                    "Celda (%{x}, %{y})<br>"
+                    "Densidad acumulada: %{z:.2f}<extra></extra>"
+                ),
+                name="Mapa de calor",
+            )
+        )
 
     def _add_trajectory_traces(
         self,
