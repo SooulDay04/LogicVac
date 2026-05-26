@@ -164,6 +164,38 @@ app.layout = html.Div(
                     ],
                     className="control-group",
                 ),
+                html.Div(
+                    [
+                        html.Label("Trayectorias"),
+                        dcc.Checklist(
+                            id="trajectory-toggle",
+                            options=[{"label": "Mostrar trayectorias", "value": "show"}],
+                            value=[],
+                            className="trajectory-toggle",
+                            inputClassName="personality-filter-input",
+                            labelClassName="personality-filter-label",
+                        ),
+                        dcc.Dropdown(
+                            id="trajectory-mode",
+                            options=[
+                                {"label": "Ruta de todos", "value": "all"},
+                                {"label": "Ruta individual", "value": "individual"},
+                                {"label": "Todos + individual", "value": "both"},
+                                {"label": "Optima vs real", "value": "comparison"},
+                            ],
+                            value="all",
+                            clearable=False,
+                        ),
+                        dcc.Dropdown(
+                            id="trajectory-agent",
+                            options=[],
+                            value=0,
+                            clearable=False,
+                        ),
+                        html.Div(id="path-summary", className="path-summary"),
+                    ],
+                    className="control-group trajectory-panel",
+                ),
                 html.Button("Exportar datos", id="export-button", n_clicks=0, className="secondary-button"),
                 html.Div(
                     [
@@ -297,6 +329,24 @@ app.index_string = """
             .personality-filter-input {
                 accent-color: #0f766e;
             }
+            .trajectory-panel {
+                display: grid;
+                gap: 12px;
+            }
+            .trajectory-toggle {
+                font-size: 14px;
+                color: #334155;
+            }
+            .path-summary {
+                min-height: 42px;
+                padding: 10px 12px;
+                border: 1px solid #d5dce5;
+                border-radius: 6px;
+                background: #ffffff;
+                color: #334155;
+                font-size: 13px;
+                line-height: 1.35;
+            }
             .legend-item {
                 display: flex;
                 align-items: center;
@@ -388,6 +438,8 @@ def update_speed(speed: int) -> int:
 @app.callback(
     Output("grid-view", "figure"),
     Output("status-line", "children"),
+    Output("trajectory-agent", "options"),
+    Output("path-summary", "children"),
     Input("simulation-clock", "n_intervals"),
     Input("reset-button", "n_clicks"),
     Input("reset-view-button", "n_clicks"),
@@ -396,7 +448,11 @@ def update_speed(speed: int) -> int:
     Input("stress-slider", "value"),
     Input("export-button", "n_clicks"),
     Input("personality-filter", "value"),
+    Input("trajectory-toggle", "value"),
+    Input("trajectory-mode", "value"),
+    Input("trajectory-agent", "value"),
     State("agent-slider", "value"),
+    State("is-running", "data"),
 )
 def update_simulation(
     n_intervals: int,
@@ -407,7 +463,11 @@ def update_simulation(
     stress_level: float,
     export_clicks: int,
     visible_personalities: list[str],
+    trajectory_toggle: list[str],
+    trajectory_mode: str,
+    selected_agent_id: int | None,
     agent_count: int,
+    is_running: bool,
 ):
     global model
     triggered = [item["prop_id"] for item in callback_context.triggered]
@@ -440,8 +500,22 @@ def update_simulation(
         paths, rows = controller.export_metrics(simulation)
         exported = ", ".join(Path(p).name for p in paths) if paths else "sin archivos"
         status = f"Paso {simulation.current_step} | Evacuados {simulation.evacuated_count}/{simulation.num_agents} | Exportado: {rows} filas ({exported})"
-        return renderer.render(simulation, reset_view_clicks, visible_personalities), status
-    elif n_intervals > 0 and any(prop.startswith("simulation-clock.") for prop in triggered):
+        agent_options, selected_agent_id = _trajectory_agent_options(simulation, selected_agent_id)
+        show_trajectories = "show" in (trajectory_toggle or [])
+        return (
+            renderer.render(
+                simulation,
+                reset_view_clicks,
+                visible_personalities,
+                show_trajectories,
+                trajectory_mode,
+                selected_agent_id,
+            ),
+            status,
+            agent_options,
+            _path_summary(simulation, selected_agent_id, show_trajectories),
+        )
+    elif _should_advance_simulation(triggered, n_intervals, is_running):
         simulation = get_model()
         if simulation.running:
             simulation.step()
@@ -449,7 +523,71 @@ def update_simulation(
     simulation = get_model()
     simulation.scenario_name = scenario_name
     status = f"Paso {simulation.current_step} | Evacuados {simulation.evacuated_count}/{simulation.num_agents}"
-    return renderer.render(simulation, reset_view_clicks, visible_personalities), status
+    agent_options, selected_agent_id = _trajectory_agent_options(simulation, selected_agent_id)
+    show_trajectories = "show" in (trajectory_toggle or [])
+    return (
+        renderer.render(
+            simulation,
+            reset_view_clicks,
+            visible_personalities,
+            show_trajectories,
+            trajectory_mode,
+            selected_agent_id,
+        ),
+        status,
+        agent_options,
+        _path_summary(simulation, selected_agent_id, show_trajectories),
+    )
+
+
+def _should_advance_simulation(
+    triggered: list[str],
+    n_intervals: int,
+    is_running: bool,
+) -> bool:
+    return (
+        bool(is_running)
+        and n_intervals > 0
+        and triggered == ["simulation-clock.n_intervals"]
+    )
+
+
+def _trajectory_agent_options(
+    simulation: EvacuationModel,
+    selected_agent_id: int | None,
+) -> tuple[list[dict[str, int | str]], int | None]:
+    agents = list(simulation.schedule.agents) if simulation.schedule is not None else []
+    options = [
+        {"label": f"Agente {agent.unique_id}", "value": agent.unique_id}
+        for agent in agents
+    ]
+    valid_ids = {agent.unique_id for agent in agents}
+    if selected_agent_id in valid_ids:
+        return options, selected_agent_id
+    return options, agents[0].unique_id if agents else None
+
+
+def _path_summary(
+    simulation: EvacuationModel,
+    selected_agent_id: int | None,
+    show_trajectories: bool,
+) -> str:
+    agents = list(simulation.schedule.agents) if simulation.schedule is not None else []
+    selected_agent = next(
+        (agent for agent in agents if agent.unique_id == selected_agent_id),
+        None,
+    )
+    if selected_agent is None:
+        return "Sin agentes disponibles."
+
+    real_length = selected_agent.walked_path_length()
+    optimal_length = max(0, len(getattr(selected_agent, "optimal_path", [])) - 1)
+    visibility = "activas" if show_trajectories else "ocultas"
+    return (
+        f"Trayectorias {visibility}. "
+        f"Agente {selected_agent.unique_id}: recorrido {real_length} celdas"
+        f" | optima {optimal_length} celdas"
+    )
 
 
 if __name__ == "__main__":

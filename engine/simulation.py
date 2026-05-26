@@ -75,6 +75,7 @@ class EvacuationModel:
             self.schedule.add_agent(agent)
             
             self.grid.place_agent(agent, (x, y))
+            agent._record_position((x, y))
 
     def step(self) -> None:
         # One leader can complete exit per simulation tick.

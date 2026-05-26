@@ -32,6 +32,8 @@ class PersonAgent(Agent):
         self.attributes = AgentAttributes(unique_id, speed=speed, personality=personality)
         self.decision_engine = DecisionEngine(self)
         self.path: list[tuple[int, int]] = []
+        self.optimal_path: list[tuple[int, int]] = []
+        self.path_history: list[tuple[int, int]] = []
         self.path_index = 0
         self.steps_blocked = 0
         self.follow_target_id: int | None = None
@@ -93,6 +95,7 @@ class PersonAgent(Agent):
         if self._can_enter(next_pos):
             self.model.grid.move_agent(self, next_pos)
             self.pos = next_pos
+            self._record_position(next_pos)
             self.path_index += 1
             self.steps_blocked = 0
             self.yielding_steps = 0
@@ -100,6 +103,7 @@ class PersonAgent(Agent):
         elif self._try_push_into(next_pos):
             self.model.grid.move_agent(self, next_pos)
             self.pos = next_pos
+            self._record_position(next_pos)
             self.path_index += 1
             self.steps_blocked = 0
             self.yielding_steps = 0
@@ -146,6 +150,7 @@ class PersonAgent(Agent):
 
         self.model.grid.move_agent(pushed_agent, push_destination)
         pushed_agent.pos = push_destination
+        pushed_agent._record_position(push_destination)
         pushed_agent.steps_blocked += 1
         pushed_agent.attributes.set_state(AgentState.BLOCKED)
         pushed_agent._evacuate_if_on_exit()
@@ -191,6 +196,7 @@ class PersonAgent(Agent):
             return False
         self.model.grid.move_agent(self, side_step)
         self.pos = side_step
+        self._record_position(side_step)
         self.steps_blocked = 0
         self.yielding_steps += 1
         self.attributes.set_state(AgentState.BLOCKED)
@@ -282,9 +288,25 @@ class PersonAgent(Agent):
     def set_path(self, path: list[tuple[int, int]]) -> None:
         self.path = path
         self.path_index = 0
+        if path and not self.optimal_path:
+            self.optimal_path = list(path)
         if path:
             if self.attributes.state != AgentState.PANIC:
                 self.attributes.set_state(AgentState.MOVING)
 
     def get_position(self) -> tuple[int, int]:
         return self.pos
+
+    def _record_position(self, pos: tuple[int, int] | None) -> None:
+        if pos is None:
+            return
+        if not self.path_history or self.path_history[-1] != pos:
+            self.path_history.append(pos)
+
+    def walked_path_length(self) -> int:
+        if len(self.path_history) < 2:
+            return 0
+        return sum(
+            abs(current[0] - previous[0]) + abs(current[1] - previous[1])
+            for previous, current in zip(self.path_history, self.path_history[1:])
+        )

@@ -3,6 +3,7 @@ import unittest
 from evacsim.agents.attributes import AgentAttributes
 from evacsim.agents.personality import PERSONALITY_PROFILES, PersonalityType
 from evacsim.agents.states import AgentState
+from evacsim.engine.simulation import EvacuationModel
 
 
 class TestAgents(unittest.TestCase):
@@ -77,6 +78,17 @@ class TestAgents(unittest.TestCase):
         self.assertTrue(attrs.is_evacuated())
         attrs.set_state(AgentState.MOVING)
         self.assertFalse(attrs.is_evacuated())
+
+    def test_agent_tracks_path_history_from_start(self) -> None:
+        model = EvacuationModel(num_agents=1, grid_size=8, seed=1)
+        model.setup()
+        agent = model.schedule.agents[0]
+
+        self.assertEqual(agent.path_history, [agent.pos])
+        agent._record_position((agent.pos[0] + 1, agent.pos[1]))
+
+        self.assertEqual(len(agent.path_history), 2)
+        self.assertEqual(agent.walked_path_length(), 1)
 
 
 if __name__ == "__main__":
