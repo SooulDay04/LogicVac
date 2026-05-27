@@ -9,9 +9,10 @@ class TestScenarios(unittest.TestCase):
 
     def test_list_scenarios(self) -> None:
         scenarios = self.loader.list_scenarios()
-        self.assertEqual(len(scenarios), 5)
+        self.assertEqual(len(scenarios), 6)
         self.assertIn("scenario_1", scenarios)
         self.assertIn("scenario_5", scenarios)
+        self.assertIn("scenario_6", scenarios)
 
     def test_load_scenario_1(self) -> None:
         config = self.loader.load_scenario("scenario_1")
@@ -36,6 +37,12 @@ class TestScenarios(unittest.TestCase):
     def test_load_scenario_5(self) -> None:
         config = self.loader.load_scenario("scenario_5")
         self.assertTrue(config["social_behavior"])
+
+    def test_load_scenario_6(self) -> None:
+        config = self.loader.load_scenario("scenario_6")
+        self.assertEqual(config["num_exits"], 4)
+        self.assertEqual(len(config["layout"]), 30)
+        self.assertTrue(all(len(row) == 30 for row in config["layout"]))
 
     def test_load_unknown_scenario(self) -> None:
         config = self.loader.load_scenario("unknown")

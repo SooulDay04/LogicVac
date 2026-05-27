@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections import deque
+
 from evacsim.config import CellType
 from evacsim.environment.grid import Grid
 
@@ -41,6 +43,24 @@ class Building:
     def get_nearest_exit(self, x: int, y: int) -> tuple[int, int] | None:
         if not self.exits:
             return None
-        return min(
-            self.exits, key=lambda e: abs(e[0] - x) + abs(e[1] - y)
-        )
+
+        start = (x, y)
+        exits = set(self.exits)
+        queue: deque[tuple[int, int]] = deque([start])
+        visited = {start}
+
+        while queue:
+            current = queue.popleft()
+            if current in exits:
+                return current
+
+            for neighbor in self.grid.get_neighbors(*current):
+                if neighbor in visited:
+                    continue
+                if not self.grid.is_walkable(*neighbor):
+                    continue
+
+                visited.add(neighbor)
+                queue.append(neighbor)
+
+        return min(self.exits, key=lambda e: abs(e[0] - x) + abs(e[1] - y))

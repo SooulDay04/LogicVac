@@ -63,6 +63,13 @@ class ScenarioLoader:
                 "has_obstacles": True,
                 "social_behavior": True,
             },
+            "scenario_6": {
+                "num_agents": 40,
+                "grid_size": 30,
+                "num_exits": 4,
+                "has_obstacles": False,
+                "social_behavior": True,
+            },
         }
         return defaults.get(name, defaults["scenario_1"])
 
@@ -73,4 +80,5 @@ class ScenarioLoader:
             "scenario_3",
             "scenario_4",
             "scenario_5",
+            "scenario_6",
         ]

@@ -67,3 +67,36 @@ class MetricsCalculator:
             "final_evacuated": data[-1].get("evacuated", 0),
             "total_agents": data[-1].get("total_agents", 0),
         }
+
+    @staticmethod
+    def evacuated_per_tick(data: list[dict[str, Any]]) -> list[dict[str, int]]:
+        if not data:
+            return []
+        result: list[dict[str, int]] = []
+        previous = 0
+        for row in data:
+            current = int(row.get("evacuated", 0))
+            result.append(
+                {
+                    "step": int(row.get("step", 0)),
+                    "evacuated_this_tick": max(0, current - previous),
+                }
+            )
+            previous = current
+        return result
+
+    @staticmethod
+    def max_congestion(data: list[dict[str, Any]]) -> int:
+        if not data:
+            return 0
+        return max(int(row.get("blocked", 0)) for row in data)
+
+    @staticmethod
+    def mean_and_std_from_dict_values(values: dict[int, int]) -> tuple[float, float]:
+        series = [float(v) for v in values.values()]
+        if not series:
+            return 0.0, 0.0
+        return (
+            MetricsCalculator.calculate_mean(series),
+            MetricsCalculator.calculate_std_dev(series),
+        )

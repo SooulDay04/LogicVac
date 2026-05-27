@@ -8,7 +8,8 @@ PROJECT_DIR = PACKAGE_DIR.parent
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
-from dash import Dash, Input, Output, State, callback_context, dcc, html
+from dash import Dash, Input, Output, State, callback_context, dash_table, dcc, html
+import plotly.graph_objects as go
 
 from evacsim.agents.personality import PERSONALITY_PROFILES, PersonalityType
 from evacsim.engine.simulation import EvacuationModel
@@ -255,7 +256,42 @@ app.layout = html.Div(
                         ],
                     },
                     className="grid-graph",
-                )
+                ),
+                html.Div(
+                    [
+                        html.Div(id="metrics-indicators", className="path-summary"),
+                        dcc.Graph(id="metrics-evac-chart", className="grid-graph"),
+                        dcc.Graph(id="metrics-congestion-chart", className="grid-graph"),
+                        dash_table.DataTable(
+                            id="metrics-individual-table",
+                            columns=[
+                                {"name": "Agente", "id": "agent_id"},
+                                {"name": "Tiempo evac.", "id": "evacuation_time"},
+                            ],
+                            data=[],
+                            page_size=8,
+                        ),
+                        dash_table.DataTable(
+                            id="metrics-top-cells",
+                            columns=[
+                                {"name": "Celda", "id": "cell"},
+                                {"name": "Transitos", "id": "transits"},
+                            ],
+                            data=[],
+                            page_size=5,
+                        ),
+                        dash_table.DataTable(
+                            id="metrics-top-route",
+                            columns=[
+                                {"name": "Ruta mas usada", "id": "route"},
+                                {"name": "Usos", "id": "uses"},
+                            ],
+                            data=[],
+                            page_size=1,
+                        ),
+                    ],
+                    className="control-group",
+                ),
             ],
             className="canvas",
         ),
@@ -470,6 +506,12 @@ def update_speed(speed: int) -> int:
     Output("status-line", "children"),
     Output("trajectory-agent", "options"),
     Output("path-summary", "children"),
+    Output("metrics-indicators", "children"),
+    Output("metrics-evac-chart", "figure"),
+    Output("metrics-congestion-chart", "figure"),
+    Output("metrics-individual-table", "data"),
+    Output("metrics-top-cells", "data"),
+    Output("metrics-top-route", "data"),
     Input("simulation-clock", "n_intervals"),
     Input("reset-button", "n_clicks"),
     Input("reset-view-button", "n_clicks"),
@@ -552,6 +594,7 @@ def update_simulation(
             status,
             agent_options,
             _path_summary(simulation, selected_agent_id, show_trajectories),
+            *_metrics_outputs(simulation),
         )
     elif any(prop.startswith("export-heatmap-image-button.") for prop in triggered):
         simulation = get_model()
@@ -573,6 +616,7 @@ def update_simulation(
             status,
             agent_options,
             _path_summary(simulation, selected_agent_id, show_trajectories),
+            *_metrics_outputs(simulation),
         )
     elif any(prop.startswith("export-heatmap-csv-button.") for prop in triggered):
         simulation = get_model()
@@ -595,6 +639,7 @@ def update_simulation(
             status,
             agent_options,
             _path_summary(simulation, selected_agent_id, show_trajectories),
+            *_metrics_outputs(simulation),
         )
     elif _should_advance_simulation(triggered, n_intervals, is_running):
         simulation = get_model()
@@ -620,6 +665,7 @@ def update_simulation(
         status,
         agent_options,
         _path_summary(simulation, selected_agent_id, show_trajectories),
+        *_metrics_outputs(simulation),
     )
 
 
@@ -679,6 +725,63 @@ def _path_summary(
         f"Agente {selected_agent.unique_id}: recorrido {real_length} celdas"
         f" | optima {optimal_length} celdas"
     )
+
+
+def _metrics_outputs(simulation: EvacuationModel):
+    report = controller.build_metrics_report(simulation)
+    per_tick = report.get("evacuated_per_tick", [])
+    steps = [row.get("step", 0) for row in per_tick]
+    evac_values = [row.get("evacuated_this_tick", 0) for row in per_tick]
+    block_values = [
+        row.get("blocked", 0)
+        for row in (simulation.metrics_collector.get_data() if simulation.metrics_collector else [])
+    ]
+    block_steps = [
+        row.get("step", 0)
+        for row in (simulation.metrics_collector.get_data() if simulation.metrics_collector else [])
+    ]
+
+    evac_fig = go.Figure(
+        data=[go.Bar(x=steps, y=evac_values, name="Evacuados/tick", marker_color="#0f766e")]
+    )
+    evac_fig.update_layout(
+        title="Evacuados por tick",
+        margin=dict(l=20, r=20, t=40, b=20),
+        height=280,
+    )
+    congestion_fig = go.Figure(
+        data=[go.Scatter(x=block_steps, y=block_values, mode="lines+markers", name="Bloqueados")]
+    )
+    congestion_fig.update_layout(
+        title="Congestion (agentes bloqueados)",
+        margin=dict(l=20, r=20, t=40, b=20),
+        height=280,
+    )
+
+    indicators = (
+        f"Tiempo total: {report.get('total_evacuation_time', 0)} | "
+        f"Promedio: {report.get('average_evacuation_time', 0):.2f} | "
+        f"Desv. estandar: {report.get('std_evacuation_time', 0):.2f} | "
+        f"Congestion maxima: {report.get('max_congestion', 0)} | "
+        f"Eficiencia escenario: {report.get('scenario_efficiency', 0):.4f}"
+    )
+    individual_data = [
+        {"agent_id": agent_id, "evacuation_time": value}
+        for agent_id, value in report.get("individual_evacuation_time", {}).items()
+    ]
+    top_cells_data = report.get("most_transited_cells", [])
+    top_cells_data = [
+        {"cell": f"({row['cell'][0]}, {row['cell'][1]})", "transits": row["transits"]}
+        for row in top_cells_data
+    ]
+    most_route = report.get("most_used_route", {})
+    top_route_data = [
+        {
+            "route": " -> ".join(f"({cell[0]}, {cell[1]})" for cell in most_route.get("route", [])),
+            "uses": most_route.get("uses", 0),
+        }
+    ]
+    return indicators, evac_fig, congestion_fig, individual_data, top_cells_data, top_route_data
 
 
 if __name__ == "__main__":
