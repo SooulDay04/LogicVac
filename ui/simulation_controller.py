@@ -49,9 +49,19 @@ class SimulationController:
             stress_level=stress_level,
         )
         model.setup()
+        model.scenario_name = scenario_name
         model.route_manager.set_algorithm(route_algorithm)
         self._apply_scenario_layout(model, scenario)
+        model.clear_timeline_cache(record_initial=True)
         return model
+
+    def run_full_simulation(self, model: EvacuationModel, max_steps: int = 500) -> int:
+        steps_run = 0
+        model.running = True
+        while model.running and steps_run < max_steps:
+            model.step()
+            steps_run += 1
+        return steps_run
 
     def export_metrics(self, model: EvacuationModel) -> tuple[list[str], int]:
         data = model.metrics_collector.get_data() if model.metrics_collector is not None else []

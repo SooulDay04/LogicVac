@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import plotly.graph_objects as go
 
@@ -34,6 +34,53 @@ class PlotlyGridRenderer:
         selected_agent_id: int | None = None,
         show_heatmap: bool = False,
     ) -> go.Figure:
+        return self._render(
+            model,
+            self._agents_from_model(model),
+            self._heatmap_from_model(model),
+            view_revision,
+            visible_personalities,
+            show_trajectories,
+            trajectory_mode,
+            selected_agent_id,
+            show_heatmap,
+        )
+
+    def render_snapshot(
+        self,
+        model: EvacuationModel,
+        snapshot: dict[str, Any],
+        view_revision: int = 0,
+        visible_personalities: list[str] | None = None,
+        show_trajectories: bool = False,
+        trajectory_mode: str = "all",
+        selected_agent_id: int | None = None,
+        show_heatmap: bool = False,
+    ) -> go.Figure:
+        return self._render(
+            model,
+            list(snapshot.get("agents", [])),
+            snapshot.get("heatmap", {}),
+            view_revision,
+            visible_personalities,
+            show_trajectories,
+            trajectory_mode,
+            selected_agent_id,
+            show_heatmap,
+        )
+
+    def _render(
+        self,
+        model: EvacuationModel,
+        agent_rows: list[dict[str, Any]],
+        heatmap: dict[str, Any],
+        view_revision: int = 0,
+        visible_personalities: list[str] | None = None,
+        show_trajectories: bool = False,
+        trajectory_mode: str = "all",
+        selected_agent_id: int | None = None,
+        show_heatmap: bool = False,
+    ) -> go.Figure:
         env_grid = model.environment.grid
         grid_size = model.grid_size
         z = [
@@ -53,13 +100,13 @@ class PlotlyGridRenderer:
             )
         )
         if show_heatmap:
-            self._add_heatmap_trace(fig, model)
+            self._add_heatmap_trace(fig, heatmap)
 
         visible_set = set(visible_personalities or [p.value for p in PersonalityType])
         visible_agents = [
             agent
-            for agent in model.schedule.agents
-            if agent.attributes.personality.value in visible_set
+            for agent in agent_rows
+            if agent.get("personality") in visible_set
         ]
         if show_trajectories:
             self._add_trajectory_traces(
@@ -72,13 +119,13 @@ class PlotlyGridRenderer:
         agents = [
             agent
             for agent in visible_agents
-            if not agent.attributes.is_evacuated() and agent.pos is not None
+            if not agent.get("evacuated") and agent.get("position") is not None
         ]
         for personality in PersonalityType:
             group_agents = [
                 agent
                 for agent in agents
-                if agent.attributes.personality == personality
+                if agent.get("personality") == personality.value
             ]
             if not group_agents:
                 continue
@@ -86,8 +133,8 @@ class PlotlyGridRenderer:
             profile = PERSONALITY_PROFILES[personality]
             fig.add_trace(
                 go.Scatter(
-                    x=[agent.pos[0] for agent in group_agents],
-                    y=[agent.pos[1] for agent in group_agents],
+                    x=[agent["position"][0] for agent in group_agents],
+                    y=[agent["position"][1] for agent in group_agents],
                     mode="markers",
                     marker={
                         "size": 11,
@@ -96,7 +143,7 @@ class PlotlyGridRenderer:
                     },
                     hovertemplate="%{text}<extra></extra>",
                     text=[
-                        f"Agente {agent.unique_id} | {profile.label}"
+                        f"Agente {agent['id']} | {profile.label}"
                         for agent in group_agents
                     ],
                     name=profile.label,
@@ -130,17 +177,40 @@ class PlotlyGridRenderer:
         )
         return fig
 
-    def _add_heatmap_trace(self, fig: go.Figure, model: EvacuationModel) -> None:
+    def _agents_from_model(self, model: EvacuationModel) -> list[dict[str, Any]]:
+        agents = list(model.schedule.agents) if model.schedule is not None else []
+        return [
+            {
+                "id": int(agent.unique_id),
+                "position": tuple(agent.pos) if agent.pos is not None else None,
+                "evacuated": agent.attributes.is_evacuated(),
+                "personality": agent.attributes.personality.value,
+                "path_history": list(getattr(agent, "path_history", [])),
+                "optimal_path": list(getattr(agent, "optimal_path", [])),
+            }
+            for agent in agents
+        ]
+
+    def _heatmap_from_model(self, model: EvacuationModel) -> dict[str, Any]:
         tracker = getattr(model, "heatmap_tracker", None)
-        if tracker is None or tracker.max_density() <= 0:
+        if tracker is None:
+            return {"cumulative_density": [], "max_density": 0.0}
+        return {
+            "cumulative_density": tracker.cumulative_density.tolist(),
+            "max_density": tracker.max_density(),
+        }
+
+    def _add_heatmap_trace(self, fig: go.Figure, heatmap: dict[str, Any]) -> None:
+        max_density = float(heatmap.get("max_density", 0.0) or 0.0)
+        if max_density <= 0:
             return
 
         fig.add_trace(
             go.Heatmap(
-                z=tracker.cumulative_density,
+                z=heatmap.get("cumulative_density", []),
                 colorscale="YlOrRd",
                 zmin=0,
-                zmax=tracker.max_density(),
+                zmax=max_density,
                 opacity=0.62,
                 colorbar={"title": "Densidad"},
                 hovertemplate=(
@@ -159,7 +229,7 @@ class PlotlyGridRenderer:
         selected_agent_id: int | None,
     ) -> None:
         selected_agent = next(
-            (agent for agent in agents if agent.unique_id == selected_agent_id),
+            (agent for agent in agents if agent.get("id") == selected_agent_id),
             agents[0] if agents else None,
         )
 
@@ -172,7 +242,7 @@ class PlotlyGridRenderer:
                     1.5,
                     0.28,
                     showlegend=False,
-                    name=f"Ruta real agente {agent.unique_id}",
+                    name=f"Ruta real agente {agent['id']}",
                 )
 
         if selected_agent is None:
@@ -186,7 +256,7 @@ class PlotlyGridRenderer:
                 3,
                 0.95,
                 showlegend=True,
-                name=f"Ruta real agente {selected_agent.unique_id}",
+                name=f"Ruta real agente {selected_agent['id']}",
             )
 
         if trajectory_mode == "comparison":
@@ -202,7 +272,7 @@ class PlotlyGridRenderer:
         showlegend: bool,
         name: str,
     ) -> None:
-        history = getattr(agent, "path_history", [])
+        history = agent.get("path_history", [])
         if len(history) < 2:
             return
 
@@ -214,8 +284,8 @@ class PlotlyGridRenderer:
                 line={"color": color, "width": width},
                 opacity=opacity,
                 hovertemplate=(
-                    f"Agente {agent.unique_id}<br>"
-                    f"Camino recorrido: {agent.walked_path_length()} celdas"
+                    f"Agente {agent['id']}<br>"
+                    f"Camino recorrido: {self._walked_path_length(history)} celdas"
                     "<extra></extra>"
                 ),
                 name=name,
@@ -224,7 +294,7 @@ class PlotlyGridRenderer:
         )
 
     def _add_optimal_path_trace(self, fig: go.Figure, agent) -> None:
-        optimal_path = getattr(agent, "optimal_path", [])
+        optimal_path = agent.get("optimal_path", [])
         if len(optimal_path) < 2:
             return
 
@@ -236,11 +306,19 @@ class PlotlyGridRenderer:
                 line={"color": "#0f766e", "width": 3, "dash": "dash"},
                 opacity=0.9,
                 hovertemplate=(
-                    f"Ruta optima agente {agent.unique_id}<br>"
+                    f"Ruta optima agente {agent['id']}<br>"
                     f"Longitud optima: {len(optimal_path) - 1} celdas"
                     "<extra></extra>"
                 ),
-                name=f"Ruta optima agente {agent.unique_id}",
+                name=f"Ruta optima agente {agent['id']}",
                 showlegend=True,
             )
+        )
+
+    def _walked_path_length(self, history: list[tuple[int, int]]) -> int:
+        if len(history) < 2:
+            return 0
+        return sum(
+            abs(current[0] - previous[0]) + abs(current[1] - previous[1])
+            for previous, current in zip(history, history[1:])
         )

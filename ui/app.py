@@ -74,8 +74,16 @@ app.layout = html.Div(
                 html.Div(
                     [
                         html.Button("Iniciar", id="start-button", n_clicks=0, className="primary-button"),
+                        html.Button("Play", id="play-button", n_clicks=0, className="secondary-button"),
+                        html.Button("Pause", id="pause-button", n_clicks=0, className="secondary-button"),
+                    ],
+                    className="button-row",
+                ),
+                html.Div(
+                    [
                         html.Button("Reiniciar", id="reset-button", n_clicks=0, className="secondary-button"),
                         html.Button("Vista", id="reset-view-button", n_clicks=0, className="secondary-button"),
+                        html.Button("Simular todo", id="run-full-button", n_clicks=0, className="secondary-button"),
                     ],
                     className="button-row",
                 ),
@@ -241,6 +249,37 @@ app.layout = html.Div(
         ),
         html.Main(
             [
+                html.Div(
+                    [
+                        html.Div(
+                            [
+                                html.Button("Inicio", id="timeline-reset-button", n_clicks=0, className="secondary-button"),
+                                html.Button("Paso -", id="step-backward-button", n_clicks=0, className="secondary-button"),
+                                html.Button("Paso +", id="step-forward-button", n_clicks=0, className="secondary-button"),
+                                html.Button("Final", id="timeline-end-button", n_clicks=0, className="secondary-button"),
+                            ],
+                            className="timeline-buttons",
+                        ),
+                        dcc.Slider(
+                            id="time-slider",
+                            min=0,
+                            max=0,
+                            step=1,
+                            value=0,
+                            marks={0: "0"},
+                            tooltip={"placement": "bottom", "always_visible": False},
+                        ),
+                        html.Div(
+                            [
+                                html.Span(id="timeline-tick"),
+                                html.Span(id="timeline-elapsed"),
+                                html.Span(id="timeline-percent"),
+                            ],
+                            className="timeline-stats",
+                        ),
+                    ],
+                    className="timeline-panel",
+                ),
                 dcc.Graph(
                     id="grid-view",
                     figure=renderer.render(get_model(), show_heatmap=True),
@@ -429,7 +468,30 @@ app.index_string = """
             .canvas {
                 padding: 24px;
                 display: flex;
+                flex-direction: column;
                 align-items: stretch;
+                gap: 16px;
+            }
+            .timeline-panel {
+                display: grid;
+                gap: 12px;
+                padding: 14px 16px;
+                background: #f8fafc;
+                border: 1px solid #d5dce5;
+                border-radius: 8px;
+            }
+            .timeline-buttons {
+                display: grid;
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+                gap: 10px;
+            }
+            .timeline-stats {
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 10px;
+                color: #334155;
+                font-size: 13px;
+                font-weight: 700;
             }
             .grid-graph {
                 width: 100%;
@@ -476,16 +538,46 @@ app.index_string = """
     Output("simulation-clock", "disabled"),
     Output("start-button", "children"),
     Input("start-button", "n_clicks"),
+    Input("play-button", "n_clicks"),
+    Input("pause-button", "n_clicks"),
     Input("reset-button", "n_clicks"),
+    Input("run-full-button", "n_clicks"),
+    Input("step-forward-button", "n_clicks"),
+    Input("step-backward-button", "n_clicks"),
+    Input("timeline-reset-button", "n_clicks"),
+    Input("timeline-end-button", "n_clicks"),
     State("is-running", "data"),
 )
 def sync_running_state(
     start_clicks: int,
+    play_clicks: int,
+    pause_clicks: int,
     reset_clicks: int,
+    run_full_clicks: int,
+    step_forward_clicks: int,
+    step_backward_clicks: int,
+    timeline_reset_clicks: int,
+    timeline_end_clicks: int,
     is_running: bool,
 ) -> tuple[bool, bool, str]:
     triggered = [item["prop_id"] for item in callback_context.triggered]
     if any(prop.startswith("reset-button.") for prop in triggered):
+        is_running = False
+    elif any(prop.startswith("play-button.") for prop in triggered):
+        is_running = True
+    elif any(prop.startswith("pause-button.") for prop in triggered):
+        is_running = False
+    elif any(
+        prop.startswith(prefix)
+        for prefix in (
+            "run-full-button.",
+            "step-forward-button.",
+            "step-backward-button.",
+            "timeline-reset-button.",
+            "timeline-end-button.",
+        )
+        for prop in triggered
+    ):
         is_running = False
     elif any(prop.startswith("start-button.") for prop in triggered):
         is_running = not bool(is_running)
@@ -512,21 +604,33 @@ def update_speed(speed: int) -> int:
     Output("metrics-individual-table", "data"),
     Output("metrics-top-cells", "data"),
     Output("metrics-top-route", "data"),
+    Output("time-slider", "min"),
+    Output("time-slider", "max"),
+    Output("time-slider", "value"),
+    Output("timeline-tick", "children"),
+    Output("timeline-elapsed", "children"),
+    Output("timeline-percent", "children"),
     Input("simulation-clock", "n_intervals"),
     Input("reset-button", "n_clicks"),
     Input("reset-view-button", "n_clicks"),
     Input("scenario-selector", "value"),
     Input("route-selector", "value"),
     Input("stress-slider", "value"),
+    Input("agent-slider", "value"),
     Input("export-button", "n_clicks"),
     Input("export-heatmap-image-button", "n_clicks"),
     Input("export-heatmap-csv-button", "n_clicks"),
+    Input("run-full-button", "n_clicks"),
+    Input("time-slider", "value"),
+    Input("timeline-reset-button", "n_clicks"),
+    Input("timeline-end-button", "n_clicks"),
+    Input("step-forward-button", "n_clicks"),
+    Input("step-backward-button", "n_clicks"),
     Input("personality-filter", "value"),
     Input("trajectory-toggle", "value"),
     Input("trajectory-mode", "value"),
     Input("trajectory-agent", "value"),
     Input("heatmap-toggle", "value"),
-    State("agent-slider", "value"),
     State("is-running", "data"),
 )
 def update_simulation(
@@ -536,19 +640,26 @@ def update_simulation(
     scenario_name: str,
     route_algorithm: str,
     stress_level: float,
+    agent_count: int,
     export_clicks: int,
     export_heatmap_image_clicks: int,
     export_heatmap_csv_clicks: int,
+    run_full_clicks: int,
+    timeline_tick: int | None,
+    timeline_reset_clicks: int,
+    timeline_end_clicks: int,
+    step_forward_clicks: int,
+    step_backward_clicks: int,
     visible_personalities: list[str],
     trajectory_toggle: list[str],
     trajectory_mode: str,
     selected_agent_id: int | None,
     heatmap_toggle: list[str],
-    agent_count: int,
     is_running: bool,
 ):
     global model
     triggered = [item["prop_id"] for item in callback_context.triggered]
+    display_tick = int(timeline_tick or 0)
 
     if (
         model is None
@@ -557,6 +668,7 @@ def update_simulation(
             for prefix in (
                 "reset-button.",
                 "scenario-selector.",
+                "route-selector.",
                 "stress-slider.",
                 "agent-slider.",
             )
@@ -570,91 +682,121 @@ def update_simulation(
             stress_level=stress_level,
         )
         model.scenario_name = scenario_name
-    elif any(prop.startswith("route-selector.") for prop in triggered):
-        simulation = get_model()
-        simulation.route_manager.set_algorithm(route_algorithm)
+        display_tick = 0
     elif any(prop.startswith("export-button.") for prop in triggered):
         simulation = get_model()
         paths, rows = controller.export_metrics(simulation)
         exported = ", ".join(Path(p).name for p in paths) if paths else "sin archivos"
-        status = f"Paso {simulation.current_step} | Evacuados {simulation.evacuated_count}/{simulation.num_agents} | Exportado: {rows} filas ({exported})"
-        agent_options, selected_agent_id = _trajectory_agent_options(simulation, selected_agent_id)
-        show_trajectories = "show" in (trajectory_toggle or [])
-        show_heatmap = "show" in (heatmap_toggle or [])
-        return (
-            renderer.render(
-                simulation,
-                reset_view_clicks,
-                visible_personalities,
-                show_trajectories,
-                trajectory_mode,
-                selected_agent_id,
-                show_heatmap,
-            ),
-            status,
-            agent_options,
-            _path_summary(simulation, selected_agent_id, show_trajectories),
-            *_metrics_outputs(simulation),
+        return _timeline_outputs(
+            simulation,
+            display_tick,
+            reset_view_clicks,
+            visible_personalities,
+            trajectory_toggle,
+            trajectory_mode,
+            selected_agent_id,
+            heatmap_toggle,
+            f"Exportado: {rows} filas ({exported})",
         )
     elif any(prop.startswith("export-heatmap-image-button.") for prop in triggered):
         simulation = get_model()
         path = controller.export_heatmap_image(simulation)
-        status = _status_with_export(simulation, f"Imagen heatmap: {Path(path).name}")
-        agent_options, selected_agent_id = _trajectory_agent_options(simulation, selected_agent_id)
-        show_trajectories = "show" in (trajectory_toggle or [])
-        show_heatmap = "show" in (heatmap_toggle or [])
-        return (
-            renderer.render(
-                simulation,
-                reset_view_clicks,
-                visible_personalities,
-                show_trajectories,
-                trajectory_mode,
-                selected_agent_id,
-                show_heatmap,
-            ),
-            status,
-            agent_options,
-            _path_summary(simulation, selected_agent_id, show_trajectories),
-            *_metrics_outputs(simulation),
+        return _timeline_outputs(
+            simulation,
+            display_tick,
+            reset_view_clicks,
+            visible_personalities,
+            trajectory_toggle,
+            trajectory_mode,
+            selected_agent_id,
+            heatmap_toggle,
+            f"Exportado: Imagen heatmap: {Path(path).name}",
         )
     elif any(prop.startswith("export-heatmap-csv-button.") for prop in triggered):
         simulation = get_model()
         paths = controller.export_heatmap_csv(simulation)
         exported = ", ".join(Path(p).name for p in paths)
-        status = _status_with_export(simulation, f"CSV heatmap: {exported}")
-        agent_options, selected_agent_id = _trajectory_agent_options(simulation, selected_agent_id)
-        show_trajectories = "show" in (trajectory_toggle or [])
-        show_heatmap = "show" in (heatmap_toggle or [])
-        return (
-            renderer.render(
-                simulation,
-                reset_view_clicks,
-                visible_personalities,
-                show_trajectories,
-                trajectory_mode,
-                selected_agent_id,
-                show_heatmap,
-            ),
-            status,
-            agent_options,
-            _path_summary(simulation, selected_agent_id, show_trajectories),
-            *_metrics_outputs(simulation),
+        return _timeline_outputs(
+            simulation,
+            display_tick,
+            reset_view_clicks,
+            visible_personalities,
+            trajectory_toggle,
+            trajectory_mode,
+            selected_agent_id,
+            heatmap_toggle,
+            f"Exportado: CSV heatmap: {exported}",
         )
+    elif any(prop.startswith("run-full-button.") for prop in triggered):
+        simulation = get_model()
+        controller.run_full_simulation(simulation)
+        display_tick = simulation.simulation_history.latest_tick
+    elif any(prop.startswith("timeline-reset-button.") for prop in triggered):
+        display_tick = 0
+    elif any(prop.startswith("timeline-end-button.") for prop in triggered):
+        simulation = get_model()
+        controller.run_full_simulation(simulation)
+        display_tick = simulation.simulation_history.latest_tick
+    elif any(prop.startswith("step-backward-button.") for prop in triggered):
+        display_tick = max(0, display_tick - 1)
+    elif any(prop.startswith("step-forward-button.") for prop in triggered):
+        simulation = get_model()
+        if display_tick < simulation.simulation_history.latest_tick:
+            display_tick += 1
+        elif simulation.running:
+            simulation.step()
+            display_tick = simulation.simulation_history.latest_tick
     elif _should_advance_simulation(triggered, n_intervals, is_running):
         simulation = get_model()
-        if simulation.running:
+        if display_tick < simulation.simulation_history.latest_tick:
+            display_tick += 1
+        elif simulation.running:
             simulation.step()
+            display_tick = simulation.simulation_history.latest_tick
 
     simulation = get_model()
     simulation.scenario_name = scenario_name
-    status = f"Paso {simulation.current_step} | Evacuados {simulation.evacuated_count}/{simulation.num_agents}"
+    display_tick = max(0, min(display_tick, simulation.simulation_history.latest_tick))
+    return _timeline_outputs(
+        simulation,
+        display_tick,
+        reset_view_clicks,
+        visible_personalities,
+        trajectory_toggle,
+        trajectory_mode,
+        selected_agent_id,
+        heatmap_toggle,
+    )
+
+
+def _timeline_outputs(
+    simulation: EvacuationModel,
+    display_tick: int,
+    reset_view_clicks: int,
+    visible_personalities: list[str],
+    trajectory_toggle: list[str],
+    trajectory_mode: str,
+    selected_agent_id: int | None,
+    heatmap_toggle: list[str],
+    status_suffix: str | None = None,
+):
+    snapshot = simulation.simulation_history.get(display_tick)
+    if snapshot is None:
+        snapshot = simulation.simulation_history.capture(simulation)
+
+    display_tick = int(snapshot.get("tick", 0))
+    latest_tick = simulation.simulation_history.latest_tick
     agent_options, selected_agent_id = _trajectory_agent_options(simulation, selected_agent_id)
     show_trajectories = "show" in (trajectory_toggle or [])
     show_heatmap = "show" in (heatmap_toggle or [])
+    status = _snapshot_status(snapshot)
+    if status_suffix:
+        status = f"{status} | {status_suffix}"
+
     return (
-        renderer.render(
+        renderer.render_snapshot(
             simulation,
+            snapshot,
             reset_view_clicks,
             visible_personalities,
             show_trajectories,
@@ -664,17 +806,28 @@ def update_simulation(
         ),
         status,
         agent_options,
-        _path_summary(simulation, selected_agent_id, show_trajectories),
-        *_metrics_outputs(simulation),
+        _path_summary(snapshot, selected_agent_id, show_trajectories),
+        *_metrics_outputs(simulation, snapshot),
+        0,
+        latest_tick,
+        display_tick,
+        f"Tick actual: {display_tick}",
+        f"Tiempo transcurrido: {snapshot.get('elapsed_time', display_tick)} ticks",
+        f"Completado: {_completion_percent(snapshot):.1f}%",
     )
 
 
-def _status_with_export(simulation: EvacuationModel, exported: str) -> str:
+def _snapshot_status(snapshot: dict) -> str:
     return (
-        f"Paso {simulation.current_step} | "
-        f"Evacuados {simulation.evacuated_count}/{simulation.num_agents} | "
-        f"Exportado: {exported}"
+        f"Paso {snapshot.get('tick', 0)} | "
+        f"Evacuados {snapshot.get('evacuated_count', 0)}/{snapshot.get('total_agents', 0)}"
     )
+
+
+def _completion_percent(snapshot: dict) -> float:
+    total_agents = max(1, int(snapshot.get("total_agents", 0) or 0))
+    evacuated = int(snapshot.get("evacuated_count", 0) or 0)
+    return (evacuated / total_agents) * 100
 
 
 def _should_advance_simulation(
@@ -705,40 +858,62 @@ def _trajectory_agent_options(
 
 
 def _path_summary(
-    simulation: EvacuationModel,
+    snapshot: dict,
     selected_agent_id: int | None,
     show_trajectories: bool,
 ) -> str:
-    agents = list(simulation.schedule.agents) if simulation.schedule is not None else []
+    agents = list(snapshot.get("agents", []))
     selected_agent = next(
-        (agent for agent in agents if agent.unique_id == selected_agent_id),
+        (agent for agent in agents if agent.get("id") == selected_agent_id),
         None,
     )
     if selected_agent is None:
         return "Sin agentes disponibles."
 
-    real_length = selected_agent.walked_path_length()
-    optimal_length = max(0, len(getattr(selected_agent, "optimal_path", [])) - 1)
+    path_history = selected_agent.get("path_history", [])
+    real_length = _walked_path_length(path_history)
+    optimal_length = max(0, len(selected_agent.get("optimal_path", [])) - 1)
     visibility = "activas" if show_trajectories else "ocultas"
     return (
         f"Trayectorias {visibility}. "
-        f"Agente {selected_agent.unique_id}: recorrido {real_length} celdas"
+        f"Agente {selected_agent.get('id')}: recorrido {real_length} celdas"
         f" | optima {optimal_length} celdas"
     )
 
 
-def _metrics_outputs(simulation: EvacuationModel):
-    report = controller.build_metrics_report(simulation)
+def _walked_path_length(path_history: list[tuple[int, int]]) -> int:
+    if len(path_history) < 2:
+        return 0
+    return sum(
+        abs(current[0] - previous[0]) + abs(current[1] - previous[1])
+        for previous, current in zip(path_history, path_history[1:])
+    )
+
+
+def _metrics_outputs(simulation: EvacuationModel, snapshot: dict | None = None):
+    if snapshot is None:
+        report = controller.build_metrics_report(simulation)
+        collector_data = simulation.metrics_collector.get_data() if simulation.metrics_collector else []
+    else:
+        metrics = snapshot.get("metrics", {})
+        collector_data = metrics.get("series", [])
+        report = controller.metrics_reporter.generate_report(
+            collector_data,
+            scenario_name=simulation.scenario_name,
+            evacuation_times=metrics.get("evacuation_times", {}),
+            cell_transits=metrics.get("cell_transits", {}),
+            route_usage=metrics.get("route_usage", {}),
+        )
     per_tick = report.get("evacuated_per_tick", [])
     steps = [row.get("step", 0) for row in per_tick]
     evac_values = [row.get("evacuated_this_tick", 0) for row in per_tick]
     block_values = [
         row.get("blocked", 0)
-        for row in (simulation.metrics_collector.get_data() if simulation.metrics_collector else [])
+        for row in collector_data
     ]
     block_steps = [
         row.get("step", 0)
-        for row in (simulation.metrics_collector.get_data() if simulation.metrics_collector else [])
+        for row in collector_data
     ]
 
     evac_fig = go.Figure(

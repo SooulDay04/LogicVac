@@ -6,6 +6,7 @@ from typing import Optional
 from evacsim.config import GRID_SIZE
 from evacsim.environment.building import Building
 from evacsim.environment.grid import Grid
+from evacsim.engine.simulation_history import SimulationHistory
 
 
 class EvacuationModel:
@@ -33,6 +34,7 @@ class EvacuationModel:
         self.current_step = 0
         self.metrics_collector: Optional[MetricsCollector] = None
         self.heatmap_tracker = None
+        self.simulation_history = SimulationHistory()
         self.scenario_name = "scenario_1"
         self.leader_exit_lock = False
 
@@ -80,7 +82,7 @@ class EvacuationModel:
             self.grid.place_agent(agent, (x, y))
             agent._record_position((x, y))
 
-        self.heatmap_tracker.record_step(self.schedule.agents)
+        self.clear_timeline_cache(record_initial=True)
 
     def step(self) -> None:
         # One leader can complete exit per simulation tick.
@@ -97,6 +99,7 @@ class EvacuationModel:
 
         if self.evacuated_count >= self.num_agents:
             self.running = False
+        self.simulation_history.capture(self)
 
     def _resolve_two_leader_endgame(self) -> None:
         from evacsim.agents.personality import PersonalityType
@@ -149,6 +152,18 @@ class EvacuationModel:
         self.evacuated_count = 0
         self.current_step = 0
         self.setup()
+
+    def clear_timeline_cache(self, record_initial: bool = True) -> None:
+        from evacsim.heatmaps.tracker import HeatmapTracker
+
+        if self.metrics_collector is not None:
+            self.metrics_collector.clear()
+        self.heatmap_tracker = HeatmapTracker(self.grid_size)
+        self.simulation_history.clear()
+
+        if record_initial and self.schedule is not None:
+            self.heatmap_tracker.record_step(self.schedule.agents)
+            self.simulation_history.capture(self)
 
     @property
     def grid(self):
