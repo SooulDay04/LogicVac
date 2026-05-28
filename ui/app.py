@@ -82,7 +82,6 @@ app.layout = html.Div(
                 html.Div(
                     [
                         html.Button("Reiniciar", id="reset-button", n_clicks=0, className="secondary-button"),
-                        html.Button("Vista", id="reset-view-button", n_clicks=0, className="secondary-button"),
                         html.Button("Simular todo", id="run-full-button", n_clicks=0, className="secondary-button"),
                     ],
                     className="button-row",
@@ -159,91 +158,6 @@ app.layout = html.Div(
                     ],
                     className="control-group",
                 ),
-                html.Div(
-                    [
-                        html.Label("Personalidades visibles"),
-                        dcc.Checklist(
-                            id="personality-filter",
-                            options=PERSONALITY_OPTIONS,
-                            value=[personality.value for personality in PersonalityType],
-                            className="personality-filter",
-                            inputClassName="personality-filter-input",
-                            labelClassName="personality-filter-label",
-                        ),
-                    ],
-                    className="control-group",
-                ),
-                html.Div(
-                    [
-                        html.Label("Trayectorias"),
-                        dcc.Checklist(
-                            id="trajectory-toggle",
-                            options=[{"label": "Mostrar trayectorias", "value": "show"}],
-                            value=[],
-                            className="trajectory-toggle",
-                            inputClassName="personality-filter-input",
-                            labelClassName="personality-filter-label",
-                        ),
-                        dcc.Dropdown(
-                            id="trajectory-mode",
-                            options=[
-                                {"label": "Ruta de todos", "value": "all"},
-                                {"label": "Ruta individual", "value": "individual"},
-                                {"label": "Todos + individual", "value": "both"},
-                                {"label": "Optima vs real", "value": "comparison"},
-                            ],
-                            value="all",
-                            clearable=False,
-                        ),
-                        dcc.Dropdown(
-                            id="trajectory-agent",
-                            options=[],
-                            value=0,
-                            clearable=False,
-                        ),
-                        html.Div(id="path-summary", className="path-summary"),
-                    ],
-                    className="control-group trajectory-panel",
-                ),
-                html.Div(
-                    [
-                        html.Label("Mapa de calor"),
-                        dcc.Checklist(
-                            id="heatmap-toggle",
-                            options=[{"label": "Mostrar mapa de calor", "value": "show"}],
-                            value=["show"],
-                            className="trajectory-toggle",
-                            inputClassName="personality-filter-input",
-                            labelClassName="personality-filter-label",
-                        ),
-                        html.Button(
-                            "Exportar imagen",
-                            id="export-heatmap-image-button",
-                            n_clicks=0,
-                            className="secondary-button",
-                        ),
-                        html.Button(
-                            "Exportar CSV",
-                            id="export-heatmap-csv-button",
-                            n_clicks=0,
-                            className="secondary-button",
-                        ),
-                    ],
-                    className="control-group heatmap-panel",
-                ),
-                html.Button("Exportar datos", id="export-button", n_clicks=0, className="secondary-button"),
-                html.Div(
-                    [
-                        legend_item("#1f2933", "Pared"),
-                        legend_item("#16a34a", "Salida"),
-                        legend_item("#7f8c8d", "Obstaculo"),
-                        *[
-                            legend_item(PERSONALITY_PROFILES[p].color, PERSONALITY_PROFILES[p].label)
-                            for p in PersonalityType
-                        ],
-                    ],
-                    className="legend",
-                ),
             ],
             className="sidebar",
         ),
@@ -253,52 +167,163 @@ app.layout = html.Div(
                     [
                         html.Div(
                             [
-                                html.Button("Inicio", id="timeline-reset-button", n_clicks=0, className="secondary-button"),
-                                html.Button("Paso -", id="step-backward-button", n_clicks=0, className="secondary-button"),
-                                html.Button("Paso +", id="step-forward-button", n_clicks=0, className="secondary-button"),
-                                html.Button("Final", id="timeline-end-button", n_clicks=0, className="secondary-button"),
+                                html.Div(
+                                    [
+                                        dcc.Graph(
+                                            id="grid-view",
+                                            figure=renderer.render(get_model(), show_heatmap=True),
+                                            config={
+                                                "displayModeBar": True,
+                                                "displaylogo": False,
+                                                "responsive": False,
+                                                "modeBarButtonsToRemove": [
+                                                    "lasso2d",
+                                                    "select2d",
+                                                    "autoScale2d",
+                                                    "toggleSpikelines",
+                                                ],
+                                            },
+                                            className="grid-graph",
+                                        ),
+                                        html.Details(
+                                            [
+                                                html.Summary("Indicadores de color"),
+                                                html.Div(
+                                                    [
+                                                        legend_item("#1f2933", "Pared"),
+                                                        legend_item("#16a34a", "Salida"),
+                                                        legend_item("#7f8c8d", "Obstaculo"),
+                                                        *[
+                                                            legend_item(PERSONALITY_PROFILES[p].color, PERSONALITY_PROFILES[p].label)
+                                                            for p in PersonalityType
+                                                        ],
+                                                    ],
+                                                    className="legend",
+                                                ),
+                                            ],
+                                            className="legend-menu map-legend",
+                                        ),
+                                    ],
+                                    className="map-container",
+                                ),
+                                html.Div(
+                                    [
+                                        html.Div(
+                                            [
+                                                html.Button("Inicio", id="timeline-reset-button", n_clicks=0, className="secondary-button"),
+                                                html.Button("Paso -", id="step-backward-button", n_clicks=0, className="secondary-button"),
+                                                html.Button("Paso +", id="step-forward-button", n_clicks=0, className="secondary-button"),
+                                                html.Button("Final", id="timeline-end-button", n_clicks=0, className="secondary-button"),
+                                            ],
+                                            className="timeline-buttons",
+                                        ),
+                                        dcc.Slider(
+                                            id="time-slider",
+                                            min=0,
+                                            max=0,
+                                            step=1,
+                                            value=0,
+                                            marks={0: "0"},
+                                            tooltip={"placement": "bottom", "always_visible": False},
+                                        ),
+                                        html.Div(
+                                            [
+                                                html.Span(id="timeline-tick"),
+                                                html.Span(id="timeline-elapsed"),
+                                                html.Span(id="timeline-percent"),
+                                            ],
+                                            className="timeline-stats",
+                                        ),
+                                    ],
+                                    className="timeline-panel timeline-under-map",
+                                ),
                             ],
-                            className="timeline-buttons",
+                            className="left-stack",
                         ),
-                        dcc.Slider(
-                            id="time-slider",
-                            min=0,
-                            max=0,
-                            step=1,
-                            value=0,
-                            marks={0: "0"},
-                            tooltip={"placement": "bottom", "always_visible": False},
-                        ),
-                        html.Div(
+                        html.Aside(
                             [
-                                html.Span(id="timeline-tick"),
-                                html.Span(id="timeline-elapsed"),
-                                html.Span(id="timeline-percent"),
+                                html.Div(
+                                    [
+                                        html.Label("Personalidades visibles"),
+                                        dcc.Checklist(
+                                            id="personality-filter",
+                                            options=PERSONALITY_OPTIONS,
+                                            value=[personality.value for personality in PersonalityType],
+                                            className="personality-filter personality-pills",
+                                            inputClassName="personality-filter-input",
+                                            labelClassName="personality-filter-label personality-pill",
+                                        ),
+                                    ],
+                                    className="control-group",
+                                ),
+                                html.Div(
+                                    [
+                                        html.Label("Trayectorias"),
+                                        dcc.Checklist(
+                                            id="trajectory-toggle",
+                                            options=[{"label": "Mostrar trayectorias", "value": "show"}],
+                                            value=[],
+                                            className="trajectory-toggle",
+                                            inputClassName="personality-filter-input",
+                                            labelClassName="personality-filter-label",
+                                        ),
+                                        dcc.Dropdown(
+                                            id="trajectory-mode",
+                                            options=[
+                                                {"label": "Ruta de todos", "value": "all"},
+                                                {"label": "Ruta individual", "value": "individual"},
+                                                {"label": "Todos + individual", "value": "both"},
+                                                {"label": "Optima vs real", "value": "comparison"},
+                                            ],
+                                            value="all",
+                                            clearable=False,
+                                        ),
+                                        dcc.Dropdown(
+                                            id="trajectory-agent",
+                                            options=[],
+                                            value=0,
+                                            clearable=False,
+                                        ),
+                                        html.Div(id="path-summary", className="path-summary"),
+                                    ],
+                                    className="control-group trajectory-panel",
+                                ),
+                                html.Div(
+                                    [
+                                        html.Label("Mapa de calor"),
+                                        dcc.Checklist(
+                                            id="heatmap-toggle",
+                                            options=[{"label": "Mostrar mapa de calor", "value": "show"}],
+                                            value=[],
+                                            className="trajectory-toggle",
+                                            inputClassName="personality-filter-input",
+                                            labelClassName="personality-filter-label",
+                                        ),
+                                        html.Button(
+                                            "Exportar imagen",
+                                            id="export-heatmap-image-button",
+                                            n_clicks=0,
+                                            className="secondary-button",
+                                        ),
+                                        html.Button(
+                                            "Exportar CSV",
+                                            id="export-heatmap-csv-button",
+                                            n_clicks=0,
+                                            className="secondary-button",
+                                        ),
+                                        html.Button("Exportar datos", id="export-button", n_clicks=0, className="secondary-button"),
+                                    ],
+                                    className="control-group heatmap-panel",
+                                ),
                             ],
-                            className="timeline-stats",
+                            className="right-panel",
                         ),
                     ],
-                    className="timeline-panel",
-                ),
-                dcc.Graph(
-                    id="grid-view",
-                    figure=renderer.render(get_model(), show_heatmap=True),
-                    config={
-                        "displayModeBar": True,
-                        "displaylogo": False,
-                        "responsive": False,
-                        "modeBarButtonsToRemove": [
-                            "lasso2d",
-                            "select2d",
-                            "autoScale2d",
-                            "toggleSpikelines",
-                        ],
-                    },
-                    className="grid-graph",
+                    className="top-row",
                 ),
                 html.Div(
                     [
-                        html.Div(id="metrics-indicators", className="path-summary"),
+                        html.Div(id="metrics-indicators", className="metrics-indicators"),
                         dcc.Graph(id="metrics-evac-chart", className="grid-graph"),
                         dcc.Graph(id="metrics-congestion-chart", className="grid-graph"),
                         dash_table.DataTable(
@@ -309,6 +334,13 @@ app.layout = html.Div(
                             ],
                             data=[],
                             page_size=8,
+                            style_table={"width": "100%", "overflowX": "auto"},
+                            style_cell={
+                                "maxWidth": "180px",
+                                "overflow": "hidden",
+                                "textOverflow": "ellipsis",
+                                "whiteSpace": "nowrap",
+                            },
                         ),
                         dash_table.DataTable(
                             id="metrics-top-cells",
@@ -318,6 +350,13 @@ app.layout = html.Div(
                             ],
                             data=[],
                             page_size=5,
+                            style_table={"width": "100%", "overflowX": "auto"},
+                            style_cell={
+                                "maxWidth": "180px",
+                                "overflow": "hidden",
+                                "textOverflow": "ellipsis",
+                                "whiteSpace": "nowrap",
+                            },
                         ),
                         dash_table.DataTable(
                             id="metrics-top-route",
@@ -327,9 +366,16 @@ app.layout = html.Div(
                             ],
                             data=[],
                             page_size=1,
+                            style_table={"width": "100%", "overflowX": "auto"},
+                            style_cell={
+                                "maxWidth": "240px",
+                                "overflow": "hidden",
+                                "textOverflow": "ellipsis",
+                                "whiteSpace": "nowrap",
+                            },
                         ),
                     ],
-                    className="control-group",
+                    className="control-group metrics-full-width",
                 ),
             ],
             className="canvas",
@@ -358,14 +404,19 @@ app.index_string = """
                 display: grid;
                 grid-template-columns: 320px 1fr;
                 min-height: 100vh;
+                align-items: start;
+                gap: 16px;
+                padding: 16px;
             }
             .sidebar {
                 background: #f8fafc;
-                border-right: 1px solid #d5dce5;
+                border: 1px solid #d5dce5;
+                border-radius: 8px;
                 padding: 28px 24px;
                 display: flex;
                 flex-direction: column;
                 gap: 24px;
+                height: fit-content;
             }
             .brand-block h1 {
                 margin: 0 0 8px;
@@ -380,7 +431,7 @@ app.index_string = """
             }
             .button-row {
                 display: grid;
-                grid-template-columns: repeat(3, 1fr);
+                grid-template-columns: repeat(2, 1fr);
                 gap: 10px;
             }
             button {
@@ -412,12 +463,61 @@ app.index_string = """
                 gap: 10px;
                 padding-top: 8px;
             }
+            .top-row {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) 320px;
+                gap: 16px;
+                align-items: start;
+            }
+            .left-stack {
+                display: grid;
+                gap: 0;
+                align-content: start;
+            }
+            .map-container {
+                position: relative;
+            }
+            .legend-menu {
+                background: #ffffff;
+                border: 1px solid #d5dce5;
+                border-radius: 8px;
+                padding: 8px 10px;
+                margin: 0;
+            }
+            .map-legend {
+                position: absolute;
+                top: 14px;
+                left: 14px;
+                z-index: 20;
+            }
+            .legend-menu summary {
+                cursor: pointer;
+                font-size: 13px;
+                font-weight: 800;
+                color: #334155;
+                list-style: none;
+            }
+            .legend-menu summary::-webkit-details-marker {
+                display: none;
+            }
+            .right-panel {
+                background: #f8fafc;
+                border: 1px solid #d5dce5;
+                border-radius: 8px;
+                padding: 14px;
+                display: grid;
+                gap: 14px;
+            }
             .personality-filter {
                 display: grid;
                 grid-template-columns: repeat(2, minmax(0, 1fr));
                 gap: 10px 12px;
                 font-size: 14px;
                 color: #334155;
+            }
+            .personality-pills {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 8px;
             }
             .personality-filter-label {
                 display: flex;
@@ -426,6 +526,14 @@ app.index_string = """
                 font-weight: 650;
                 text-transform: none;
                 margin: 0;
+            }
+            .personality-pill {
+                border: 1px solid #d5dce5;
+                border-radius: 8px;
+                padding: 6px 8px;
+                background: #ffffff;
+                cursor: pointer;
+                font-size: 13px;
             }
             .personality-filter-input {
                 accent-color: #0f766e;
@@ -466,11 +574,11 @@ app.index_string = """
                 border: 1px solid rgba(15, 23, 42, 0.15);
             }
             .canvas {
-                padding: 24px;
+                padding: 8px 8px 24px;
                 display: flex;
                 flex-direction: column;
                 align-items: stretch;
-                gap: 16px;
+                gap: 0;
             }
             .timeline-panel {
                 display: grid;
@@ -479,6 +587,28 @@ app.index_string = """
                 background: #f8fafc;
                 border: 1px solid #d5dce5;
                 border-radius: 8px;
+            }
+            .timeline-under-map {
+                width: 100%;
+                margin-top: 0;
+            }
+            .metrics-full-width {
+                width: calc(100% + 336px);
+                margin: 16px 0 0 -336px;
+            }
+            .metrics-indicators {
+                min-height: 42px;
+                padding: 10px 0;
+                border: 0;
+                border-radius: 0;
+                background: transparent;
+                color: #334155;
+                font-size: 13px;
+                line-height: 1.35;
+            }
+            #play-button,
+            #pause-button {
+                display: none;
             }
             .timeline-buttons {
                 display: grid;
@@ -506,13 +636,28 @@ app.index_string = """
             @media (max-width: 900px) {
                 .app-shell {
                     grid-template-columns: 1fr;
+                    padding: 0;
+                    gap: 0;
                 }
                 .sidebar {
-                    border-right: 0;
                     border-bottom: 1px solid #d5dce5;
+                    border-left: 0;
+                    border-right: 0;
+                    border-top: 0;
+                    border-radius: 0;
                 }
                 .canvas {
                     padding: 16px;
+                }
+                .top-row {
+                    grid-template-columns: 1fr;
+                }
+                .timeline-under-map,
+                .metrics-full-width {
+                    width: 100%;
+                }
+                .metrics-full-width {
+                    margin-left: 0;
                 }
                 .grid-graph {
                     height: 520px;
@@ -546,6 +691,7 @@ app.index_string = """
     Input("step-backward-button", "n_clicks"),
     Input("timeline-reset-button", "n_clicks"),
     Input("timeline-end-button", "n_clicks"),
+    Input("time-slider", "value"),
     State("is-running", "data"),
 )
 def sync_running_state(
@@ -558,9 +704,14 @@ def sync_running_state(
     step_backward_clicks: int,
     timeline_reset_clicks: int,
     timeline_end_clicks: int,
+    timeline_tick: int | None,
     is_running: bool,
 ) -> tuple[bool, bool, str]:
     triggered = [item["prop_id"] for item in callback_context.triggered]
+    current_model = model
+    if current_model is not None and not current_model.running:
+        is_running = False
+
     if any(prop.startswith("reset-button.") for prop in triggered):
         is_running = False
     elif any(prop.startswith("play-button.") for prop in triggered):
@@ -612,7 +763,6 @@ def update_speed(speed: int) -> int:
     Output("timeline-percent", "children"),
     Input("simulation-clock", "n_intervals"),
     Input("reset-button", "n_clicks"),
-    Input("reset-view-button", "n_clicks"),
     Input("scenario-selector", "value"),
     Input("route-selector", "value"),
     Input("stress-slider", "value"),
@@ -636,7 +786,6 @@ def update_speed(speed: int) -> int:
 def update_simulation(
     n_intervals: int,
     reset_clicks: int,
-    reset_view_clicks: int,
     scenario_name: str,
     route_algorithm: str,
     stress_level: float,
@@ -696,6 +845,7 @@ def update_simulation(
             trajectory_mode,
             selected_agent_id,
             heatmap_toggle,
+            0,
             f"Exportado: {rows} filas ({exported})",
         )
     elif any(prop.startswith("export-heatmap-image-button.") for prop in triggered):
@@ -710,6 +860,7 @@ def update_simulation(
             trajectory_mode,
             selected_agent_id,
             heatmap_toggle,
+            0,
             f"Exportado: Imagen heatmap: {Path(path).name}",
         )
     elif any(prop.startswith("export-heatmap-csv-button.") for prop in triggered):
@@ -725,6 +876,7 @@ def update_simulation(
             trajectory_mode,
             selected_agent_id,
             heatmap_toggle,
+            0,
             f"Exportado: CSV heatmap: {exported}",
         )
     elif any(prop.startswith("run-full-button.") for prop in triggered):
@@ -760,7 +912,7 @@ def update_simulation(
     return _timeline_outputs(
         simulation,
         display_tick,
-        reset_view_clicks,
+        0,
         visible_personalities,
         trajectory_toggle,
         trajectory_mode,
@@ -922,7 +1074,7 @@ def _metrics_outputs(simulation: EvacuationModel, snapshot: dict | None = None):
     evac_fig.update_layout(
         title="Evacuados por tick",
         margin=dict(l=20, r=20, t=40, b=20),
-        height=280,
+        height=220,
     )
     congestion_fig = go.Figure(
         data=[go.Scatter(x=block_steps, y=block_values, mode="lines+markers", name="Bloqueados")]
@@ -930,14 +1082,14 @@ def _metrics_outputs(simulation: EvacuationModel, snapshot: dict | None = None):
     congestion_fig.update_layout(
         title="Congestion (agentes bloqueados)",
         margin=dict(l=20, r=20, t=40, b=20),
-        height=280,
+        height=220,
     )
 
     indicators = (
-        f"Tiempo total: {report.get('total_evacuation_time', 0)} | "
-        f"Promedio: {report.get('average_evacuation_time', 0):.2f} | "
-        f"Desv. estandar: {report.get('std_evacuation_time', 0):.2f} | "
-        f"Congestion maxima: {report.get('max_congestion', 0)} | "
+        f"Tiempo total: {report.get('total_evacuation_time', 0)} "
+        f"Promedio: {report.get('average_evacuation_time', 0):.2f} "
+        f"Desv. estandar: {report.get('std_evacuation_time', 0):.2f} "
+        f"Congestion maxima: {report.get('max_congestion', 0)} "
         f"Eficiencia escenario: {report.get('scenario_efficiency', 0):.4f}"
     )
     individual_data = [

@@ -169,7 +169,7 @@ class PlotlyGridRenderer:
                 "showticklabels": False,
                 "constrain": "domain",
             },
-            showlegend=True,
+            showlegend=False,
             width=720,
             height=720,
             transition={"duration": 120, "easing": "linear"},
@@ -255,7 +255,7 @@ class PlotlyGridRenderer:
                 "#e11d48",
                 3,
                 0.95,
-                showlegend=True,
+                showlegend=False,
                 name=f"Ruta real agente {selected_agent['id']}",
             )
 
@@ -311,7 +311,7 @@ class PlotlyGridRenderer:
                     "<extra></extra>"
                 ),
                 name=f"Ruta optima agente {agent['id']}",
-                showlegend=True,
+                showlegend=False,
             )
         )
 
