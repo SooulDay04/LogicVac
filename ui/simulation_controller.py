@@ -38,7 +38,8 @@ class SimulationController:
         stress_level: float = 1.0,
     ) -> EvacuationModel:
         scenario = self.loader.load_scenario(scenario_name)
-        num_agents = agent_count if agent_count is not None else int(scenario.get("num_agents", 25))
+        requested_agents = agent_count if agent_count is not None else int(scenario.get("num_agents", 25))
+        num_agents = min(int(requested_agents), 25)
         grid_size = int(scenario.get("grid_size", GRID_SIZE))
         seed = scenario.get("seed", 42)
 

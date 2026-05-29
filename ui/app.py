@@ -92,10 +92,10 @@ app.layout = html.Div(
                         dcc.Slider(
                             id="agent-slider",
                             min=5,
-                            max=150,
+                            max=100,
                             step=5,
                             value=DEFAULT_AGENT_COUNT,
-                            marks={5: "5", 50: "50", 100: "100", 150: "150"},
+                            marks={5: "5", 50: "50", 100: "100"},
                             tooltip={"placement": "bottom", "always_visible": False},
                         ),
                     ],
